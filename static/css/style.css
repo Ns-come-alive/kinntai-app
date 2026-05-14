@@ -257,10 +257,41 @@ tr:hover td { background: var(--gray-50); }
 .mini-times { color: var(--gray-600); font-variant-numeric: tabular-nums; }
 
 /* --- Admin: Shift Form --- */
-.shift-form-grid { display: grid; gap: 12px; }
+.shift-form-grid { display: grid; gap: 16px; }
 .shift-form-row { display: flex; align-items: center; gap: 16px; }
-.shift-cast-name { font-weight: 600; color: var(--gray-700); min-width: 80px; font-size: .9375rem; }
+.shift-form-row--presets { align-items: flex-start; flex-wrap: wrap; }
+.shift-cast-name { font-weight: 600; color: var(--gray-700); min-width: 80px; font-size: .9375rem; padding-top: 8px; }
 .shift-time-input { max-width: 140px; }
+.shift-preset-wrap { flex: 1; min-width: 0; }
+.shift-preset-group {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.shift-preset-label {
+    font-size: .75rem; font-weight: 700; color: var(--gray-500);
+    text-transform: uppercase; letter-spacing: .04em; margin-right: 4px;
+    width: 100%; margin-bottom: 2px;
+}
+@media (min-width: 640px) {
+    .shift-preset-label { width: auto; margin-bottom: 0; margin-right: 10px; }
+}
+.shift-preset-btn {
+    font-family: inherit; font-size: .8125rem; font-weight: 600;
+    padding: 10px 14px; border: 2px solid var(--gray-200); border-radius: 10px;
+    background: var(--gray-50); color: var(--gray-700); cursor: pointer;
+    transition: all .2s; min-width: 88px; text-align: center;
+}
+.shift-preset-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.shift-preset-btn.active {
+    border-color: var(--primary); background: var(--primary); color: white;
+}
+.shift-preset-btn--off { border-color: var(--gray-300); }
+.shift-preset-btn--off:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-light); }
+.shift-preset-btn--off.active {
+    border-color: var(--gray-600); background: var(--gray-600); color: white;
+}
+.shift-custom-hint {
+    display: block; margin-top: 8px; font-size: .75rem; color: var(--gray-500);
+}
 
 /* --- Flash Messages --- */
 .flash-messages { margin-bottom: 24px; }

@@ -30,6 +30,7 @@
 
         <div class="dashboard-header">
             <div class="dashboard-date">シフト管理</div>
+            <div class="dashboard-greeting">出勤は開始時刻をタップ。休みは「休み」をタップしてください。</div>
         </div>
 
         <div class="card">
@@ -49,19 +50,26 @@
                 <span class="card-title">{{ view_date }} のシフト</span>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('admin_shifts') }}">
+                <form method="POST" action="{{ url_for('admin_shifts') }}" id="shift-form-main">
                     <input type="hidden" name="business_date" value="{{ view_date }}">
                     <div class="shift-form-grid">
                         {% for cast in casts %}
-                        <div class="shift-form-row">
+                        {% set cur = shifts.get(cast.id, '') %}
+                        <div class="shift-form-row shift-form-row--presets">
                             <label class="shift-cast-name">{{ cast.name }}</label>
-                            <input
-                                class="form-input shift-time-input"
-                                type="time"
-                                name="shift_{{ cast.id }}"
-                                value="{{ shifts.get(cast.id, '') }}"
-                                placeholder="--:--"
-                            >
+                            <div class="shift-preset-wrap">
+                                <input type="hidden" name="shift_{{ cast.id }}" id="shift_inp_{{ cast.id }}" value="{{ cur }}">
+                                <div class="shift-preset-group" data-hidden-id="shift_inp_{{ cast.id }}">
+                                    <span class="shift-preset-label">出勤</span>
+                                    <button type="button" class="shift-preset-btn" data-time="21:00">21:00～</button>
+                                    <button type="button" class="shift-preset-btn" data-time="22:00">22:00～</button>
+                                    <button type="button" class="shift-preset-btn" data-time="23:00">23:00～</button>
+                                    <button type="button" class="shift-preset-btn shift-preset-btn--off" data-time="">休み</button>
+                                </div>
+                                {% if cur and cur not in ['21:00', '22:00', '23:00'] %}
+                                <span class="shift-custom-hint">登録中: {{ cur }}（上から変更できます）</span>
+                                {% endif %}
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
@@ -73,4 +81,44 @@
         </div>
     </main>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function norm(t) {
+        if (!t) return '';
+        var s = String(t).trim();
+        if (s.length === 5 && s[2] === ':') return s;
+        return s;
+    }
+    function syncGroup(group) {
+        var id = group.getAttribute('data-hidden-id');
+        var inp = document.getElementById(id);
+        if (!inp) return;
+        var v = norm(inp.value);
+        var buttons = group.querySelectorAll('.shift-preset-btn');
+        buttons.forEach(function(b) {
+            var bt = norm(b.getAttribute('data-time'));
+            b.classList.toggle('active', bt === v);
+        });
+    }
+    function init() {
+        document.querySelectorAll('.shift-preset-group').forEach(function(group) {
+            syncGroup(group);
+            group.querySelectorAll('.shift-preset-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var id = group.getAttribute('data-hidden-id');
+                    var inp = document.getElementById(id);
+                    if (!inp) return;
+                    inp.value = btn.getAttribute('data-time') || '';
+                    syncGroup(group);
+                });
+            });
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();
+</script>
 {% endblock %}
