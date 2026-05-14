@@ -21,9 +21,11 @@ except OSError:
 
 DATABASE = os.path.join(_data_dir, "kintai.db")
 
-CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
+INITIAL_CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin1234"
+
+_db_initialized = False
 
 
 def get_db():
@@ -41,6 +43,10 @@ def close_db(e=None):
 
 
 def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
+
     db = get_db()
     db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -72,16 +78,18 @@ def init_db():
         );
     """)
 
-    for name in CAST_MEMBERS:
-        existing = db.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
-        if not existing:
+    user_count = db.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]
+    if user_count == 0:
+        for name in INITIAL_CAST_MEMBERS:
             db.execute("INSERT INTO users (name, is_admin) VALUES (?, 0)", (name,))
-
-    admin = db.execute("SELECT id FROM users WHERE name = ?", (ADMIN_USERNAME,)).fetchone()
-    if not admin:
         db.execute("INSERT INTO users (name, is_admin) VALUES (?, 1)", (ADMIN_USERNAME,))
+    else:
+        admin = db.execute("SELECT id FROM users WHERE name = ? AND is_admin = 1", (ADMIN_USERNAME,)).fetchone()
+        if not admin:
+            db.execute("INSERT INTO users (name, is_admin) VALUES (?, 1)", (ADMIN_USERNAME,))
 
     db.commit()
+    _db_initialized = True
 
 
 def init_app(app):

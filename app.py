@@ -10,7 +10,7 @@ from flask import (
     session, flash, jsonify, make_response
 )
 
-from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD, CAST_MEMBERS
+from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
