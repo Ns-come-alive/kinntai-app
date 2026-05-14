@@ -23,7 +23,7 @@ DATABASE = os.path.join(_data_dir, "kintai.db")
 
 INITIAL_CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin1234"
+ADMIN_PASSWORD = "Gift-0723"
 
 _db_initialized = False
 
