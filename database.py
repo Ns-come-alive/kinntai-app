@@ -2,7 +2,23 @@ import sqlite3
 import os
 from flask import g
 
-_data_dir = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+_default_dir = os.path.dirname(__file__) or "."
+_data_dir = os.environ.get("DATA_DIR", _default_dir)
+
+if not os.path.isdir(_data_dir):
+    try:
+        os.makedirs(_data_dir, exist_ok=True)
+    except OSError:
+        _data_dir = "/tmp"
+
+try:
+    _test_file = os.path.join(_data_dir, ".write_test")
+    with open(_test_file, "w") as f:
+        f.write("test")
+    os.remove(_test_file)
+except OSError:
+    _data_dir = "/tmp"
+
 DATABASE = os.path.join(_data_dir, "kintai.db")
 
 CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]

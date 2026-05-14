@@ -1,6 +1,7 @@
 import os
 import csv
 import io
+import math
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -191,7 +192,6 @@ def _determine_status(db, user_id, business_date, clock_in_time, punch_type="nor
 
 def _calc_late_hours(shift_start, clock_in_time, punch_type="normal"):
     """遅刻時間を30分刻みで算出。1分でも過ぎたら0.5時間。"""
-    import math
     try:
         shift_dt = datetime.strptime(shift_start, "%H:%M")
         clock_dt = datetime.strptime(clock_in_time, "%H:%M:%S")
