@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}アクセス認証 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="auth-wrapper">
+    <div class="auth-card" style="max-width: 400px;">
+        <div class="auth-logo">&#128272;</div>
+        <h1 class="auth-title">アクセス認証</h1>
+        <p class="auth-subtitle">アクセスコードを入力してください</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('site_gate') }}">
+            <div class="form-group">
+                <input class="form-input" type="password" name="access_code" placeholder="アクセスコード" required autofocus style="text-align: center; font-size: 1.25rem; letter-spacing: 2px;">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-lg">認証する</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

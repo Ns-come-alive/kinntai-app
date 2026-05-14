@@ -17,6 +17,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
 
 BUSINESS_DAY_START_HOUR = 20  # 20:00
 BUSINESS_DAY_END_HOUR = 9    # 09:00
+SITE_ACCESS_CODE = os.environ.get("SITE_ACCESS_CODE", "Gift-0723")
 
 
 def get_business_date(dt=None):
@@ -33,9 +34,20 @@ def get_business_date(dt=None):
         return dt.strftime("%Y-%m-%d")
 
 
+def site_access_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if request.cookies.get("site_access") == SITE_ACCESS_CODE:
+            return f(*args, **kwargs)
+        return redirect(url_for("site_gate"))
+    return decorated
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.cookies.get("site_access") != SITE_ACCESS_CODE:
+            return redirect(url_for("site_gate"))
         if "user_id" not in session:
             return redirect(url_for("login"))
         return f(*args, **kwargs)
@@ -45,6 +57,8 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.cookies.get("site_access") != SITE_ACCESS_CODE:
+            return redirect(url_for("site_gate"))
         if not session.get("is_admin"):
             flash("管理者権限が必要です。", "error")
             return redirect(url_for("login"))
@@ -57,9 +71,30 @@ def before_request():
     init_db()
 
 
+# --------------- Site Gate ---------------
+
+@app.route("/gate", methods=["GET", "POST"])
+def site_gate():
+    if request.cookies.get("site_access") == SITE_ACCESS_CODE:
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        code = request.form.get("access_code", "").strip()
+        if code == SITE_ACCESS_CODE:
+            resp = make_response(redirect(url_for("login")))
+            resp.set_cookie("site_access", SITE_ACCESS_CODE, max_age=60*60*24*30, httponly=True, samesite="Lax")
+            return resp
+        else:
+            flash("アクセスコードが正しくありません。", "error")
+            return redirect(url_for("site_gate"))
+
+    return render_template("gate.html")
+
+
 # --------------- Auth ---------------
 
 @app.route("/login", methods=["GET"])
+@site_access_required
 def login():
     db = get_db()
     casts = db.execute(
@@ -69,6 +104,7 @@ def login():
 
 
 @app.route("/login/cast/<int:user_id>", methods=["POST"])
+@site_access_required
 def login_cast(user_id):
     db = get_db()
     user = db.execute("SELECT * FROM users WHERE id = ? AND is_admin = 0", (user_id,)).fetchone()
@@ -83,6 +119,7 @@ def login_cast(user_id):
 
 
 @app.route("/login/admin", methods=["POST"])
+@site_access_required
 def login_admin():
     password = request.form.get("password", "")
     if password != ADMIN_PASSWORD:
