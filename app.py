@@ -587,6 +587,54 @@ def check_absent():
     return redirect(url_for("admin_dashboard"))
 
 
+# --------------- Cast Management ---------------
+
+@app.route("/admin/casts")
+@admin_required
+def admin_casts():
+    db = get_db()
+    casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
+    return render_template("admin_casts.html", casts=casts)
+
+
+@app.route("/admin/casts/add", methods=["POST"])
+@admin_required
+def admin_cast_add():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("名前を入力してください。", "error")
+        return redirect(url_for("admin_casts"))
+
+    db = get_db()
+    existing = db.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
+    if existing:
+        flash(f"「{name}」は既に登録されています。", "error")
+        return redirect(url_for("admin_casts"))
+
+    db.execute("INSERT INTO users (name, is_admin) VALUES (?, 0)", (name,))
+    db.commit()
+    flash(f"「{name}」を追加しました。", "success")
+    return redirect(url_for("admin_casts"))
+
+
+@app.route("/admin/casts/delete/<int:cast_id>", methods=["POST"])
+@admin_required
+def admin_cast_delete(cast_id):
+    db = get_db()
+    cast = db.execute("SELECT * FROM users WHERE id = ? AND is_admin = 0", (cast_id,)).fetchone()
+    if not cast:
+        flash("キャストが見つかりません。", "error")
+        return redirect(url_for("admin_casts"))
+
+    db.execute("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE user_id = ?)", (cast_id,))
+    db.execute("DELETE FROM attendance WHERE user_id = ?", (cast_id,))
+    db.execute("DELETE FROM shifts WHERE user_id = ?", (cast_id,))
+    db.execute("DELETE FROM users WHERE id = ?", (cast_id,))
+    db.commit()
+    flash(f"「{cast['name']}」を削除しました。", "success")
+    return redirect(url_for("admin_casts"))
+
+
 @app.route("/admin/export")
 @admin_required
 def admin_export():

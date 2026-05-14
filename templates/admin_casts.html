@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}キャスト管理 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>
+            <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link">勤怠履歴</a>
+            <a href="{{ url_for('admin_casts') }}" class="navbar-link active">キャスト管理</a>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="dashboard-header">
+            <div class="dashboard-date">キャスト管理</div>
+            <div class="dashboard-greeting">キャストの追加・削除ができます</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <span class="card-title">キャストを追加</span>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_cast_add') }}" style="display: flex; gap: 12px; align-items: flex-end;">
+                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                        <label class="form-label">名前</label>
+                        <input class="form-input" type="text" name="name" placeholder="キャスト名を入力" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">追加</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">登録済みキャスト（{{ casts|length }}名）</span>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>名前</th>
+                                <th>登録日</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if casts|length == 0 %}
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 32px; color: var(--gray-400);">
+                                    キャストが登録されていません
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% for c in casts %}
+                            <tr>
+                                <td>{{ c.id }}</td>
+                                <td style="font-weight: 600;">{{ c.name }}</td>
+                                <td>{{ c.created_at or '-' }}</td>
+                                <td style="text-align: right;">
+                                    <form method="POST" action="{{ url_for('admin_cast_delete', cast_id=c.id) }}" style="display: inline;">
+                                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('「{{ c.name }}」を削除しますか？\n関連する勤怠データもすべて削除されます。')">
+                                            削除
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
