@@ -2,7 +2,8 @@ import sqlite3
 import os
 from flask import g
 
-DATABASE = os.path.join(os.path.dirname(__file__), "kintai.db")
+_data_dir = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+DATABASE = os.path.join(_data_dir, "kintai.db")
 
 CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
 ADMIN_USERNAME = "admin"
