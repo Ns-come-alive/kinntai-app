@@ -626,7 +626,6 @@ def admin_cast_delete(cast_id):
         flash("キャストが見つかりません。", "error")
         return redirect(url_for("admin_casts"))
 
-    db.execute("DELETE FROM breaks WHERE attendance_id IN (SELECT id FROM attendance WHERE user_id = ?)", (cast_id,))
     db.execute("DELETE FROM attendance WHERE user_id = ?", (cast_id,))
     db.execute("DELETE FROM shifts WHERE user_id = ?", (cast_id,))
     db.execute("DELETE FROM users WHERE id = ?", (cast_id,))
