@@ -88,25 +88,30 @@ body {
 
 /* Cast Grid on Login */
 .cast-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
     margin-bottom: 32px;
+}
+.cast-grid form {
+    flex: 0 0 auto;
 }
 .cast-tab {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px; padding: 20px 12px;
+    gap: 8px;
+    width: 110px; height: 110px;
     background: var(--gray-50); border: 2px solid var(--gray-200);
-    border-radius: 12px; cursor: pointer; transition: all .2s;
+    border-radius: 14px; cursor: pointer; transition: all .2s;
     font-family: inherit; font-size: 1rem; font-weight: 600; color: var(--gray-700);
 }
 .cast-tab:hover {
     background: var(--primary-light); border-color: var(--primary);
-    color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow-md);
+    color: var(--primary); transform: translateY(-3px); box-shadow: var(--shadow-md);
 }
 .cast-tab:active { transform: translateY(0); }
-.cast-icon { font-size: 1.75rem; }
-.cast-name { font-size: .9375rem; }
+.cast-icon { font-size: 2rem; }
+.cast-name { font-size: .9375rem; letter-spacing: .5px; }
 
 .admin-login-section { border-top: 1px solid var(--gray-200); padding-top: 20px; }
 .admin-toggle summary {
@@ -322,8 +327,10 @@ tr:hover td { background: var(--gray-50); }
     .clock-display { font-size: 2.5rem; }
     .action-buttons { grid-template-columns: 1fr; }
     .auth-card { padding: 28px 20px; }
-    .cast-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
-    .cast-tab { padding: 14px 8px; }
+    .cast-grid { gap: 10px; }
+    .cast-tab { width: 95px; height: 95px; }
+    .cast-icon { font-size: 1.75rem; }
+    .cast-name { font-size: .8125rem; }
     .card-body { padding: 16px; }
     th, td { padding: 10px 12px; }
     .cast-status-grid { grid-template-columns: 1fr; }
