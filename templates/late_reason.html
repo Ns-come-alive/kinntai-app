@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}遅刻理由の選択 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理
+        </a>
+        <div class="navbar-right">
+            <span class="navbar-user">{{ session.user_name }}</span>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">&#9888; 遅刻理由の選択</span>
+            </div>
+            <div class="card-body">
+                <div class="late-notice">
+                    <p>シフト開始時刻を過ぎています。遅刻理由を選択してください。</p>
+                    <div class="late-detail">
+                        <span>打刻時刻: <strong>{{ pending.clock_time }}</strong></span>
+                        <span>種別: <strong>{% if pending.punch_type == 'douhan' %}同伴出勤{% else %}通常出勤{% endif %}</strong></span>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('late_reason') }}">
+                    <div class="reason-options">
+                        {% for reason in reasons %}
+                        <label class="reason-option">
+                            <input type="radio" name="late_reason" value="{{ reason }}" {% if loop.first %}checked{% endif %}>
+                            <span class="reason-label">{{ reason }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="action-buttons" style="margin-top: 24px;">
+                        <button type="submit" class="btn btn-warning btn-lg btn-block" style="grid-column: 1 / -1;">
+                            この理由で打刻する
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

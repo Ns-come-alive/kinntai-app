@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}シフト管理 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>
+            <a href="{{ url_for('admin_shifts') }}" class="navbar-link active">シフト管理</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link">勤怠履歴</a>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="dashboard-header">
+            <div class="dashboard-date">シフト管理</div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('admin_shifts') }}" class="date-selector">
+                    <label class="form-label">営業日を選択:</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input class="form-input" type="date" name="date" value="{{ view_date }}" style="max-width: 200px;">
+                        <button type="submit" class="btn btn-outline btn-sm">表示</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-24">
+            <div class="card-header">
+                <span class="card-title">{{ view_date }} のシフト</span>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_shifts') }}">
+                    <input type="hidden" name="business_date" value="{{ view_date }}">
+                    <div class="shift-form-grid">
+                        {% for cast in casts %}
+                        <div class="shift-form-row">
+                            <label class="shift-cast-name">{{ cast.name }}</label>
+                            <input
+                                class="form-input shift-time-input"
+                                type="time"
+                                name="shift_{{ cast.id }}"
+                                value="{{ shifts.get(cast.id, '') }}"
+                                placeholder="--:--"
+                            >
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button type="submit" class="btn btn-primary">シフトを保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

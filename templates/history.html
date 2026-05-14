@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}勤怠履歴 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('dashboard') }}" class="navbar-link">打刻</a>
+            <a href="{{ url_for('history') }}" class="navbar-link active">勤怠履歴</a>
+            <span class="navbar-user">{{ session.user_name }}</span>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="month-nav">
+            {% set prev_month = month - 1 %}
+            {% set prev_year = year %}
+            {% if prev_month < 1 %}
+                {% set prev_month = 12 %}
+                {% set prev_year = year - 1 %}
+            {% endif %}
+            {% set next_month = month + 1 %}
+            {% set next_year = year %}
+            {% if next_month > 12 %}
+                {% set next_month = 1 %}
+                {% set next_year = year + 1 %}
+            {% endif %}
+
+            <a href="{{ url_for('history', year=prev_year, month=prev_month) }}">&larr; 前月</a>
+            <span class="current">{{ year }}年{{ month }}月</span>
+            <a href="{{ url_for('history', year=next_year, month=next_month) }}">翌月 &rarr;</a>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="label">出勤日数</div>
+                <div class="value">{{ total_days }}<span class="unit">日</span></div>
+            </div>
+            <div class="summary-card">
+                <div class="label">稼働時間</div>
+                <div class="value">{{ total_work_hours }}<span class="unit">時間</span></div>
+            </div>
+            <div class="summary-card">
+                <div class="label">遅刻時間</div>
+                <div class="value {% if total_late_hours > 0 %}summary-warn{% endif %}">{{ total_late_hours }}<span class="unit">時間</span></div>
+            </div>
+            <div class="summary-card">
+                <div class="label">欠勤日数</div>
+                <div class="value {% if absent_days > 0 %}summary-danger{% endif %}">{{ absent_days }}<span class="unit">日</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">勤怠一覧</span>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>営業日</th>
+                                <th>種別</th>
+                                <th>出勤</th>
+                                <th>退勤</th>
+                                <th>ステータス</th>
+                                <th>遅刻理由</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if records|length == 0 %}
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 32px; color: var(--gray-400);">
+                                    この月の勤怠記録はありません
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% for r in records %}
+                            <tr>
+                                <td>{{ r.business_date }}</td>
+                                <td>
+                                    {% if r.punch_type == 'douhan' %}
+                                        <span class="punch-badge douhan">同伴</span>
+                                    {% elif r.punch_type == 'absent' %}
+                                        <span class="punch-badge absent">当欠</span>
+                                    {% else %}
+                                        <span class="punch-badge normal">通常</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.clock_in or '-' }}</td>
+                                <td>{{ r.clock_out or '-' }}</td>
+                                <td>
+                                    {% if '遅刻' in (r.status or '') %}
+                                        <span class="status-tag late">{{ r.status }}</span>
+                                    {% elif r.status == '当欠' %}
+                                        <span class="status-tag absent">{{ r.status }}</span>
+                                    {% else %}
+                                        <span class="status-tag ok">{{ r.status or '-' }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.late_reason or '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}ログイン - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="auth-wrapper">
+    <div class="auth-card" style="max-width: 520px;">
+        <div class="auth-logo">&#128336;</div>
+        <h1 class="auth-title">勤怠管理</h1>
+        <p class="auth-subtitle">名前をタップしてログイン</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="cast-grid">
+            {% for cast in casts %}
+            <form method="POST" action="{{ url_for('login_cast', user_id=cast.id) }}">
+                <button type="submit" class="cast-tab">
+                    <span class="cast-icon">&#128100;</span>
+                    <span class="cast-name">{{ cast.name }}</span>
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+
+        <div class="admin-login-section">
+            <details class="admin-toggle">
+                <summary>管理者ログイン</summary>
+                <form method="POST" action="{{ url_for('login_admin') }}" class="admin-form">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <input class="form-input" type="password" name="password" placeholder="管理者パスワード" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">管理者ログイン</button>
+                </form>
+            </details>
+        </div>
+    </div>
+</div>
+{% endblock %}

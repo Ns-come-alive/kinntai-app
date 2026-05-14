@@ -1,0 +1,71 @@
+import sqlite3
+import os
+from flask import g
+
+DATABASE = os.path.join(os.path.dirname(__file__), "kintai.db")
+
+CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "admin1234"
+
+
+def get_db():
+    if "db" not in g:
+        g.db = sqlite3.connect(DATABASE)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
+    return g.db
+
+
+def close_db(e=None):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    db = get_db()
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            is_admin INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            business_date TEXT NOT NULL,
+            shift_start TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            UNIQUE(user_id, business_date)
+        );
+
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            business_date TEXT NOT NULL,
+            clock_in TEXT NOT NULL,
+            clock_out TEXT,
+            punch_type TEXT DEFAULT 'normal',
+            status TEXT DEFAULT '',
+            late_reason TEXT DEFAULT '',
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+    """)
+
+    for name in CAST_MEMBERS:
+        existing = db.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
+        if not existing:
+            db.execute("INSERT INTO users (name, is_admin) VALUES (?, 0)", (name,))
+
+    admin = db.execute("SELECT id FROM users WHERE name = ?", (ADMIN_USERNAME,)).fetchone()
+    if not admin:
+        db.execute("INSERT INTO users (name, is_admin) VALUES (?, 1)", (ADMIN_USERNAME,))
+
+    db.commit()
+
+
+def init_app(app):
+    app.teardown_appcontext(close_db)

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}勤怠履歴 (管理者) - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>
+            <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link active">勤怠履歴</a>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="dashboard-header">
+            <div class="dashboard-date">勤怠履歴</div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('admin_history') }}" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">キャスト</label>
+                        <select name="cast_id" class="form-input" style="max-width: 160px;">
+                            <option value="0" {% if cast_id == 0 %}selected{% endif %}>全員</option>
+                            {% for c in casts %}
+                            <option value="{{ c.id }}" {% if cast_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">年</label>
+                        <input class="form-input" type="number" name="year" value="{{ year }}" min="2020" max="2099" style="max-width: 100px;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">月</label>
+                        <input class="form-input" type="number" name="month" value="{{ month }}" min="1" max="12" style="max-width: 80px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">表示</button>
+                    <a href="{{ url_for('admin_export', year=year, month=month, cast_id=cast_id) }}" class="btn btn-outline btn-sm">&#128196; CSV出力</a>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <span class="card-title">{{ year }}年{{ month }}月 キャスト別サマリー</span>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <div class="cast-tabs">
+                    {% for c in casts %}
+                    <button class="cast-summary-tab {% if loop.first %}active{% endif %}" onclick="showCastSummary(this, 'cast-summary-{{ c.id }}')">
+                        {{ c.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+                {% for c in casts %}
+                {% set s = cast_summaries[c.id] %}
+                <div class="cast-summary-panel {% if loop.first %}active{% endif %}" id="cast-summary-{{ c.id }}">
+                    <div class="summary-grid" style="margin-bottom: 0;">
+                        <div class="summary-card">
+                            <div class="label">出勤日数</div>
+                            <div class="value">{{ s.total_days }}<span class="unit">日</span></div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">総勤務時間</div>
+                            <div class="value">{{ s.total_work_hours }}<span class="unit">時間</span></div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">遅刻時間</div>
+                            <div class="value {% if s.total_late_hours > 0 %}summary-warn{% endif %}">{{ s.total_late_hours }}<span class="unit">時間</span></div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">欠勤日数</div>
+                            <div class="value {% if s.absent_days > 0 %}summary-danger{% endif %}">{{ s.absent_days }}<span class="unit">日</span></div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">{{ year }}年{{ month }}月の勤怠</span>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>キャスト</th>
+                                <th>営業日</th>
+                                <th>種別</th>
+                                <th>出勤</th>
+                                <th>退勤</th>
+                                <th>ステータス</th>
+                                <th>遅刻理由</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if records|length == 0 %}
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 32px; color: var(--gray-400);">
+                                    該当する勤怠記録はありません
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% for r in records %}
+                            <tr>
+                                <td>{{ r.cast_name }}</td>
+                                <td>{{ r.business_date }}</td>
+                                <td>
+                                    {% if r.punch_type == 'douhan' %}
+                                        <span class="punch-badge douhan">同伴</span>
+                                    {% elif r.punch_type == 'absent' %}
+                                        <span class="punch-badge absent">当欠</span>
+                                    {% else %}
+                                        <span class="punch-badge normal">通常</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.clock_in or '-' }}</td>
+                                <td>{{ r.clock_out or '-' }}</td>
+                                <td>
+                                    {% if '遅刻' in (r.status or '') %}
+                                        <span class="status-tag late">{{ r.status }}</span>
+                                    {% elif r.status == '当欠' %}
+                                        <span class="status-tag absent">{{ r.status }}</span>
+                                    {% else %}
+                                        <span class="status-tag ok">{{ r.status or '-' }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.late_reason or '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showCastSummary(tab, panelId) {
+    document.querySelectorAll('.cast-summary-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.cast-summary-panel').forEach(function(p) { p.classList.remove('active'); });
+    tab.classList.add('active');
+    document.getElementById(panelId).classList.add('active');
+}
+</script>
+{% endblock %}

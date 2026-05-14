@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}管理者ダッシュボード - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('admin_dashboard') }}" class="navbar-link active">本日の状況</a>
+            <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link">勤怠履歴</a>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="dashboard-header">
+            <div class="dashboard-date">営業日: {{ business_date }}</div>
+            <div class="dashboard-greeting">キャスト勤怠状況</div>
+        </div>
+
+        <form method="POST" action="{{ url_for('check_absent') }}" style="margin-bottom: 24px;">
+            <input type="hidden" name="business_date" value="{{ business_date }}">
+            <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('シフト登録済みで打刻がないキャストを当欠にします。よろしいですか？')">
+                &#9888; 当欠チェック実行
+            </button>
+        </form>
+
+        <div class="cast-status-grid">
+            {% for item in cast_data %}
+            <div class="card cast-status-card">
+                <div class="card-header">
+                    <span class="card-title">{{ item.cast.name }}</span>
+                    {% if item.shift %}
+                        <span class="shift-label">シフト {{ item.shift.shift_start }}～</span>
+                    {% else %}
+                        <span class="shift-label none">シフト未登録</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if item.records|length == 0 %}
+                        <p style="color: var(--gray-400); font-size: 0.875rem; text-align: center;">打刻なし</p>
+                    {% else %}
+                        {% for r in item.records %}
+                        <div class="mini-record">
+                            <span>
+                                {% if r.punch_type == 'douhan' %}
+                                    <span class="punch-badge douhan sm">同伴</span>
+                                {% elif r.punch_type == 'absent' %}
+                                    <span class="punch-badge absent sm">当欠</span>
+                                {% else %}
+                                    <span class="punch-badge normal sm">通常</span>
+                                {% endif %}
+                            </span>
+                            <span class="mini-times">
+                                {{ r.clock_in or '-' }} ～ {{ r.clock_out or '勤務中' }}
+                            </span>
+                            <span>
+                                {% if '遅刻' in (r.status or '') %}
+                                    <span class="status-tag late sm">{{ r.status }}</span>
+                                    {% if r.late_reason %}
+                                        <span class="late-reason-text">{{ r.late_reason }}</span>
+                                    {% endif %}
+                                {% elif r.status == '当欠' %}
+                                    <span class="status-tag absent sm">当欠</span>
+                                {% else %}
+                                    <span class="status-tag ok sm">{{ r.status or '' }}</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+</div>
+{% endblock %}
