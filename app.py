@@ -18,6 +18,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
 BUSINESS_DAY_START_HOUR = 20  # 20:00
 BUSINESS_DAY_END_HOUR = 9    # 09:00
 SITE_ACCESS_CODE = os.environ.get("SITE_ACCESS_CODE", "Gift-0723")
+# 実質ほぼ無期限（秒）。ブラウザにより Max-Age の上限あり（例: Chrome は約400日で打ち切り）
+SITE_ACCESS_COOKIE_MAX_AGE = int(os.environ.get("SITE_ACCESS_COOKIE_MAX_AGE", str(60 * 60 * 24 * 365 * 20)))
 
 
 def get_business_date(dt=None):
@@ -89,7 +91,15 @@ def site_gate():
         code = request.form.get("access_code", "").strip()
         if code == SITE_ACCESS_CODE:
             resp = make_response(redirect(url_for("login")))
-            resp.set_cookie("site_access", SITE_ACCESS_CODE, max_age=60*60*24*30, httponly=True, samesite="Lax")
+            secure = request.is_secure or request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+            resp.set_cookie(
+                "site_access",
+                SITE_ACCESS_CODE,
+                max_age=SITE_ACCESS_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="Lax",
+                secure=secure,
+            )
             return resp
         else:
             flash("アクセスコードが正しくありません。", "error")
