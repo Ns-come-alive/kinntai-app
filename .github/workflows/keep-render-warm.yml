@@ -1,0 +1,19 @@
+# Render 無料プランのスリープを避けるため、定期的にヘルスチェックへアクセスします。
+# URL を変えた場合は下の RENDER_HEALTH_URL を書き換えてください。
+name: Keep Render warm
+
+on:
+  schedule:
+    # UTC。14分間隔で実行（0,14,28,42,56分）
+    - cron: "*/14 * * * *"
+  workflow_dispatch:
+
+env:
+  RENDER_HEALTH_URL: https://kinntai-app.onrender.com/healthz
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health check
+        run: curl -fsSL -o /dev/null "$RENDER_HEALTH_URL"
