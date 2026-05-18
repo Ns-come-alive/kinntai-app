@@ -1,11 +1,14 @@
 {% extends "base.html" %}
-{% block title %}ログイン - 勤怠管理{% endblock %}
+{% block title %}ログイン - タイムカード{% endblock %}
 
 {% block body %}
 <div class="auth-wrapper">
     <div class="auth-card" style="max-width: 560px;">
-        <div class="auth-logo">&#128336;</div>
-        <h1 class="auth-title">勤怠管理</h1>
+        <div class="auth-datetime">
+            <div class="auth-datetime-date" id="login-live-date">--</div>
+            <div class="auth-datetime-clock" id="login-live-clock">--:--:--</div>
+        </div>
+        <h1 class="auth-title">タイムカード</h1>
         <p class="auth-subtitle">名前をタップしてログイン</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -42,4 +45,26 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function tick() {
+        var now = new Date();
+        var days = ['日', '月', '火', '水', '木', '金', '土'];
+        var dEl = document.getElementById('login-live-date');
+        var cEl = document.getElementById('login-live-clock');
+        if (dEl) {
+            dEl.textContent = now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日（' + days[now.getDay()] + '）';
+        }
+        if (cEl) {
+            cEl.textContent = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+        }
+    }
+    tick();
+    setInterval(tick, 1000);
+})();
+</script>
 {% endblock %}

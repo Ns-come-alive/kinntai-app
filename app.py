@@ -68,7 +68,14 @@ def admin_required(f):
 
 @app.before_request
 def before_request():
+    if request.path == "/healthz":
+        return
     init_db()
+
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
 
 
 # --------------- Site Gate ---------------
