@@ -4,11 +4,11 @@
 {% block body %}
 <div class="auth-wrapper">
     <div class="auth-card" style="max-width: 560px;">
+        <h1 class="auth-title">タイムカード</h1>
         <div class="auth-datetime">
             <div class="auth-datetime-date" id="login-live-date">--</div>
             <div class="auth-datetime-clock" id="login-live-clock">--:--:--</div>
         </div>
-        <h1 class="auth-title">タイムカード</h1>
         <p class="auth-subtitle">名前をタップしてログイン</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
