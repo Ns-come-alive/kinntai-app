@@ -2,8 +2,14 @@ import os
 import csv
 import io
 import math
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from functools import wraps
+
+JST = timezone(timedelta(hours=9))
+
+
+def now_jst():
+    return datetime.now(JST)
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -11,6 +17,7 @@ from flask import (
 )
 
 from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
+from sheets import sync_clock_in, sync_clock_out, sync_absent
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
@@ -29,7 +36,7 @@ def get_business_date(dt=None):
     09:00～19:59 → 営業時間外（当日を返すが通常は使わない）
     """
     if dt is None:
-        dt = datetime.now()
+        dt = now_jst()
     if dt.hour < BUSINESS_DAY_END_HOUR:
         return (dt - timedelta(days=1)).strftime("%Y-%m-%d")
     else:
@@ -171,7 +178,7 @@ def dashboard():
 
     db = get_db()
     user_id = session["user_id"]
-    now = datetime.now()
+    now = now_jst()
     business_date = get_business_date(now)
 
     records = db.execute(
@@ -281,7 +288,7 @@ def clock_in():
     punch_type = request.form.get("punch_type", "normal")
     db = get_db()
     user_id = session["user_id"]
-    now = datetime.now()
+    now = now_jst()
     business_date = get_business_date(now)
     clock_time = now.strftime("%H:%M:%S")
 
@@ -315,6 +322,8 @@ def clock_in():
     )
     db.commit()
 
+    sync_clock_in(session["user_name"], business_date, clock_time, punch_type, status)
+
     label = "同伴出勤" if punch_type == "douhan" else "出勤"
     flash(f"{label}しました。", "success")
     return redirect(url_for("dashboard"))
@@ -338,6 +347,11 @@ def late_reason():
              pending["punch_type"], pending["status"], reason),
         )
         db.commit()
+
+        sync_clock_in(
+            session["user_name"], pending["business_date"], pending["clock_time"],
+            pending["punch_type"], pending["status"], reason,
+        )
         session.pop("pending_clock", None)
 
         label = "同伴出勤" if pending["punch_type"] == "douhan" else "出勤"
@@ -352,7 +366,7 @@ def late_reason():
 def clock_out():
     db = get_db()
     user_id = session["user_id"]
-    now = datetime.now()
+    now = now_jst()
     business_date = get_business_date(now)
     clock_time = now.strftime("%H:%M:%S")
 
@@ -383,6 +397,9 @@ def clock_out():
         (clock_time, active["id"]),
     )
     db.commit()
+
+    sync_clock_out(session["user_name"], business_date, clock_in_str, clock_time)
+
     flash("退勤しました。お疲れ様でした。", "success")
     return redirect(url_for("dashboard"))
 
@@ -395,8 +412,8 @@ def history():
     db = get_db()
     user_id = session["user_id"]
 
-    year = request.args.get("year", date.today().year, type=int)
-    month = request.args.get("month", date.today().month, type=int)
+    year = request.args.get("year", now_jst().date().year, type=int)
+    month = request.args.get("month", now_jst().date().month, type=int)
 
     start_date = f"{year:04d}-{month:02d}-01"
     if month == 12:
@@ -431,7 +448,7 @@ def history():
 @admin_required
 def admin_dashboard():
     db = get_db()
-    now = datetime.now()
+    now = now_jst()
     business_date = get_business_date(now)
 
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
@@ -563,8 +580,8 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
 def admin_history():
     db = get_db()
 
-    year = request.args.get("year", date.today().year, type=int)
-    month = request.args.get("month", date.today().month, type=int)
+    year = request.args.get("year", now_jst().date().year, type=int)
+    month = request.args.get("month", now_jst().date().month, type=int)
     cast_id = request.args.get("cast_id", 0, type=int)
 
     start_date = f"{year:04d}-{month:02d}-01"
@@ -634,6 +651,7 @@ def check_absent():
                 "INSERT INTO attendance (user_id, business_date, clock_in, punch_type, status) VALUES (?, ?, '', 'absent', '当欠')",
                 (c["id"], business_date),
             )
+            sync_absent(c["name"], business_date)
             count += 1
 
     db.commit()
@@ -692,8 +710,8 @@ def admin_cast_delete(cast_id):
 @admin_required
 def admin_export():
     db = get_db()
-    year = request.args.get("year", date.today().year, type=int)
-    month = request.args.get("month", date.today().month, type=int)
+    year = request.args.get("year", now_jst().date().year, type=int)
+    month = request.args.get("month", now_jst().date().month, type=int)
     cast_id = request.args.get("cast_id", 0, type=int)
 
     start_date = f"{year:04d}-{month:02d}-01"
