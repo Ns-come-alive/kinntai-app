@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}勤怠履歴 (管理者) - 勤怠管理{% endblock %}
+{% block title %}出勤履歴 (管理者) - 勤怠管理{% endblock %}
 
 {% block body %}
 <div class="app-container">
@@ -11,7 +11,7 @@
         <div class="navbar-right">
             <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>
             <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
-            <a href="{{ url_for('admin_history') }}" class="navbar-link active">勤怠履歴</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link active">出勤履歴</a>
             <a href="{{ url_for('admin_casts') }}" class="navbar-link">キャスト管理</a>
             <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
         </div>
@@ -19,7 +19,7 @@
 
     <main class="main-content">
         <div class="dashboard-header">
-            <div class="dashboard-date">勤怠履歴</div>
+            <div class="dashboard-date">出勤履歴</div>
         </div>
 
         <div class="card" style="margin-bottom: 24px;">

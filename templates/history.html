@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}勤怠履歴 - 勤怠管理{% endblock %}
+{% block title %}出勤履歴 - 勤怠管理{% endblock %}
 
 {% block body %}
 <div class="app-container">
@@ -10,7 +10,7 @@
         </a>
         <div class="navbar-right">
             <a href="{{ url_for('dashboard') }}" class="navbar-link">打刻</a>
-            <a href="{{ url_for('history') }}" class="navbar-link active">勤怠履歴</a>
+            <a href="{{ url_for('history') }}" class="navbar-link active">出勤履歴</a>
             <span class="navbar-user">{{ session.user_name }}</span>
             <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
         </div>
