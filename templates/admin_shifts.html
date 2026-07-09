@@ -35,12 +35,9 @@
 
         <div class="card">
             <div class="card-body">
-                <form method="GET" action="{{ url_for('admin_shifts') }}" class="date-selector">
+                <form method="GET" action="{{ url_for('admin_shifts') }}" id="date-select-form" class="date-selector">
                     <label class="form-label">営業日を選択:</label>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <input class="form-input" type="date" name="date" value="{{ view_date }}" style="max-width: 200px;">
-                        <button type="submit" class="btn btn-outline btn-sm">表示</button>
-                    </div>
+                    <input class="form-input" type="date" name="date" value="{{ view_date }}" id="date-picker" style="max-width: 200px;">
                 </form>
             </div>
         </div>
@@ -120,5 +117,9 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
 })();
+
+document.getElementById('date-picker').addEventListener('change', function() {
+    document.getElementById('date-select-form').submit();
+});
 </script>
 {% endblock %}
