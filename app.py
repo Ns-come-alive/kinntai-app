@@ -77,7 +77,7 @@ def admin_required(f):
 
 @app.before_request
 def before_request():
-    if request.path == "/healthz":
+    if request.path in ("/healthz", "/debug-db"):
         return
     init_db()
 
@@ -85,6 +85,23 @@ def before_request():
 @app.route("/healthz")
 def healthz():
     return "ok", 200
+
+
+@app.route("/debug-db")
+def debug_db():
+    import traceback
+    try:
+        import psycopg2
+        url = os.environ.get("DATABASE_URL", "(not set)")
+        safe_url = url[:20] + "***" if len(url) > 20 else url
+        conn = psycopg2.connect(url, sslmode="require", connect_timeout=5)
+        cur = conn.cursor()
+        cur.execute("SELECT version()")
+        ver = cur.fetchone()[0]
+        conn.close()
+        return f"OK - connected\n{ver}\nURL prefix: {safe_url}", 200
+    except Exception as e:
+        return f"ERROR: {type(e).__name__}: {e}\n\n{traceback.format_exc()}", 500
 
 
 # --------------- Site Gate ---------------
