@@ -13,20 +13,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping health check
-        run: |
-          curl -fsSL -o /dev/null -w "HTTP %{http_code}" "$RENDER_HEALTH_URL" || true
-
-  keep-alive:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Keep workflow alive
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit --allow-empty -m "keep-alive: prevent scheduled workflow from being disabled"
-          git push
-        if: github.event_name == 'schedule' && github.run_number % 100 == 0
+        run: curl -fsSL -o /dev/null -w "HTTP %{http_code}" "$RENDER_HEALTH_URL" || true
