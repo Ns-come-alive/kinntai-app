@@ -9,9 +9,3 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
-      - key: DATA_DIR
-        value: /data
-    disk:
-      name: kintai-data
-      mountPath: /data
-      sizeGB: 1
