@@ -1,10 +1,7 @@
-# Render 無料プランのスリープを避けるため、定期的にヘルスチェックへアクセスします。
-# URL を変えた場合は下の RENDER_HEALTH_URL を書き換えてください。
 name: Keep Render warm
 
 on:
   schedule:
-    # UTC。14分間隔で実行（0,14,28,42,56分）
     - cron: "*/14 * * * *"
   workflow_dispatch:
 
@@ -16,4 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping health check
-        run: curl -fsSL -o /dev/null "$RENDER_HEALTH_URL"
+        run: |
+          curl -fsSL -o /dev/null -w "HTTP %{http_code}" "$RENDER_HEALTH_URL" || true
+
+  keep-alive:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep workflow alive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "keep-alive: prevent scheduled workflow from being disabled"
+          git push
+        if: github.event_name == 'schedule' && github.run_number % 100 == 0
