@@ -2,8 +2,11 @@ import os
 import csv
 import io
 import math
+import logging
 from datetime import datetime, date, timedelta, timezone
 from functools import wraps
+
+logger = logging.getLogger(__name__)
 
 JST = timezone(timedelta(hours=9))
 
@@ -17,7 +20,7 @@ from flask import (
 )
 
 from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
-from sheets import sync_clock_in, sync_clock_out, sync_absent
+import sheets
 from shift_import import parse_shift_image, is_configured as gemini_configured
 
 app = Flask(__name__)
@@ -323,7 +326,7 @@ def clock_in():
     )
     db.commit()
 
-    sync_clock_in(session["user_name"], business_date, clock_time, punch_type, status)
+    _sync_sheets(db, user_id, business_date)
 
     label = "同伴出勤" if punch_type == "douhan" else "出勤"
     flash(f"{label}しました。", "success")
@@ -349,10 +352,7 @@ def late_reason():
         )
         db.commit()
 
-        sync_clock_in(
-            session["user_name"], pending["business_date"], pending["clock_time"],
-            pending["punch_type"], pending["status"], reason,
-        )
+        _sync_sheets(db, user_id, pending["business_date"])
         session.pop("pending_clock", None)
 
         label = "同伴出勤" if pending["punch_type"] == "douhan" else "出勤"
@@ -399,7 +399,7 @@ def clock_out():
     )
     db.commit()
 
-    sync_clock_out(session["user_name"], business_date, clock_in_str, clock_time)
+    _sync_sheets(db, user_id, business_date)
 
     flash("退勤しました。お疲れ様でした。", "success")
     return redirect(url_for("dashboard"))
@@ -675,6 +675,115 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
     }
 
 
+# --------------- スプレッドシート同期 ---------------
+
+def _month_label(business_date):
+    """'2026-07-05' → '2026年07月'"""
+    return f"{business_date[:4]}年{business_date[5:7]}月"
+
+
+def _month_range(business_date):
+    """business_date が属する月の [開始日, 翌月開始日) を返す。"""
+    year = int(business_date[:4])
+    month = int(business_date[5:7])
+    start = f"{year:04d}-{month:02d}-01"
+    if month == 12:
+        end = f"{year + 1:04d}-01-01"
+    else:
+        end = f"{year:04d}-{month + 1:02d}-01"
+    return start, end
+
+
+def _punch_type_label(punch_type):
+    if punch_type == "douhan":
+        return "同伴"
+    if punch_type == "absent":
+        return "当欠"
+    return "通常"
+
+
+def _cast_history_rows(db, user_id, start_date, end_date):
+    """キャスト1人の月間打刻履歴を行データにして返す。"""
+    records = db.execute(
+        """SELECT * FROM attendance
+           WHERE user_id = ? AND business_date >= ? AND business_date < ?
+           ORDER BY business_date, id""",
+        (user_id, start_date, end_date),
+    ).fetchall()
+
+    rows = []
+    for r in records:
+        work = ""
+        if r["clock_in"] and r["clock_out"]:
+            try:
+                ci = datetime.strptime(r["clock_in"], "%H:%M:%S")
+                co = datetime.strptime(r["clock_out"], "%H:%M:%S")
+                if co < ci:
+                    diff = (co + timedelta(days=1) - ci).total_seconds()
+                else:
+                    diff = (co - ci).total_seconds()
+                work = round(diff / 3600, 2)
+            except (ValueError, TypeError):
+                work = ""
+        rows.append([
+            r["business_date"],
+            r["clock_in"] or "",
+            r["clock_out"] or "",
+            work,
+            _punch_type_label(r["punch_type"]),
+            r["status"] or "",
+            r["late_reason"] or "",
+        ])
+    return rows
+
+
+def _sync_sheets(db, user_id, business_date):
+    """指定キャスト・該当月のタブと、全員月間集計タブを最新化して送信する。"""
+    if not sheets.is_configured():
+        return
+    try:
+        start_date, end_date = _month_range(business_date)
+        label = _month_label(business_date)
+
+        cast = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not cast:
+            return
+
+        summary = _calc_cast_summary(db, user_id, start_date, end_date)
+        history = _cast_history_rows(db, user_id, start_date, end_date)
+
+        casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
+        summary_rows = [["キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "欠勤日数"]]
+        for c in casts:
+            s = _calc_cast_summary(db, c["id"], start_date, end_date)
+            summary_rows.append([
+                c["name"], s["total_days"], s["total_work_hours"],
+                s["total_late_hours"], s["absent_days"],
+            ])
+
+        payload = {
+            "month_label": label,
+            "cast": {
+                "tab": f"{cast['name']} {label}",
+                "summary": [
+                    ["出勤日数", summary["total_days"]],
+                    ["総稼働時間(h)", summary["total_work_hours"]],
+                    ["遅刻時間(h)", summary["total_late_hours"]],
+                    ["欠勤日数", summary["absent_days"]],
+                ],
+                "history_header": ["営業日", "出勤", "退勤", "稼働(h)", "種別", "ステータス", "遅刻理由"],
+                "history": history,
+            },
+            "summary": {
+                "tab": f"月間集計 {label}",
+                "rows": summary_rows,
+            },
+        }
+        sheets.push(payload)
+    except Exception:
+        logger.exception("スプレッドシート同期の準備に失敗しました")
+
+
 @app.route("/admin/history")
 @admin_required
 def admin_history():
@@ -722,6 +831,7 @@ def admin_history():
         month=month,
         cast_id=cast_id,
         cast_summaries=cast_summaries,
+        sheets_enabled=sheets.is_configured(),
     )
 
 
@@ -734,6 +844,7 @@ def check_absent():
 
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
     count = 0
+    affected = []
     for c in casts:
         shift = db.execute(
             "SELECT * FROM shifts WHERE user_id = ? AND business_date = ?",
@@ -751,12 +862,36 @@ def check_absent():
                 "INSERT INTO attendance (user_id, business_date, clock_in, punch_type, status) VALUES (?, ?, '', 'absent', '当欠')",
                 (c["id"], business_date),
             )
-            sync_absent(c["name"], business_date)
+            affected.append(c["id"])
             count += 1
 
     db.commit()
+
+    for uid in affected:
+        _sync_sheets(db, uid, business_date)
+
     flash(f"当欠チェック完了。{count}件の当欠を記録しました。", "success")
     return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/sheets/export", methods=["POST"])
+@admin_required
+def admin_sheets_export():
+    if not sheets.is_configured():
+        flash("スプレッドシート連携が未設定です。", "error")
+        return redirect(url_for("admin_history"))
+
+    db = get_db()
+    year = request.form.get("year", now_jst().year, type=int)
+    month = request.form.get("month", now_jst().month, type=int)
+    any_date = f"{year:04d}-{month:02d}-15"
+
+    casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
+    for c in casts:
+        _sync_sheets(db, c["id"], any_date)
+
+    flash(f"{year}年{month:02d}月のデータをスプレッドシートへ書き出しました（反映まで少し時間がかかることがあります）。", "success")
+    return redirect(url_for("admin_history", year=year, month=month))
 
 
 # --------------- Cast Management ---------------

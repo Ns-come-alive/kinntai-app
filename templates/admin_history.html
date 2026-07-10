@@ -45,6 +45,14 @@
                     <button type="submit" class="btn btn-primary btn-sm">表示</button>
                     <a href="{{ url_for('admin_export', year=year, month=month, cast_id=cast_id) }}" class="btn btn-outline btn-sm">&#128196; CSV出力</a>
                 </form>
+                {% if sheets_enabled %}
+                <form method="POST" action="{{ url_for('admin_sheets_export') }}" style="margin-top: 12px;">
+                    <input type="hidden" name="year" value="{{ year }}">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <button type="submit" class="btn btn-outline btn-sm">&#128202; この月をスプレッドシートに書き出す</button>
+                    <span style="color: var(--gray-400); font-size: 0.75rem; margin-left: 6px;">※ 打刻時にも自動で反映されます</span>
+                </form>
+                {% endif %}
             </div>
         </div>
 
