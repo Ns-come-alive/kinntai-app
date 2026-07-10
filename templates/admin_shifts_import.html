@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}シフト読み取り確認 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>
+            <a href="{{ url_for('admin_shifts') }}" class="navbar-link active">シフト管理</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link">出勤履歴</a>
+            <a href="{{ url_for('admin_casts') }}" class="navbar-link">キャスト管理</a>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="dashboard-header">
+            <div class="dashboard-date">シフト読み取り結果の確認</div>
+            <div class="dashboard-greeting">内容を確認・修正して「登録する」を押してください。不要な行はチェックを外すと登録されません。</div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_shifts_import_save') }}">
+                    <input type="hidden" name="row_count" value="{{ rows|length }}">
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">登録</th>
+                                    <th>営業日</th>
+                                    <th>キャスト</th>
+                                    <th>出勤時刻</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in rows %}
+                                {% set i = loop.index0 %}
+                                <tr>
+                                    <td style="text-align: center;">
+                                        <input type="checkbox" name="include_{{ i }}" value="1" checked>
+                                    </td>
+                                    <td>
+                                        <input class="form-input" type="date" name="date_{{ i }}" value="{{ row.date }}" style="max-width: 170px;">
+                                    </td>
+                                    <td>
+                                        <select class="form-input" name="user_id_{{ i }}" style="max-width: 160px;">
+                                            {% for cast in casts %}
+                                            <option value="{{ cast.id }}" {% if cast.id == row.user_id %}selected{% endif %}>{{ cast.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        {% set opts = ['21:00', '22:00', '23:00'] %}
+                                        <select class="form-input" name="start_{{ i }}" style="max-width: 120px;">
+                                            {% for o in opts %}
+                                            <option value="{{ o }}" {% if o == row.start %}selected{% endif %}>{{ o }}</option>
+                                            {% endfor %}
+                                            {% if row.start not in opts %}
+                                            <option value="{{ row.start }}" selected>{{ row.start }}</option>
+                                            {% endif %}
+                                        </select>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end;">
+                        <a href="{{ url_for('admin_shifts') }}" class="btn btn-outline">キャンセル</a>
+                        <button type="submit" class="btn btn-primary">登録する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

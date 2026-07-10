@@ -18,6 +18,7 @@ from flask import (
 
 from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
 from sheets import sync_clock_in, sync_clock_out, sync_absent
+from shift_import import parse_shift_image, is_configured as gemini_configured
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
@@ -533,7 +534,96 @@ def admin_shifts():
         view_date=view_date,
         prev_date=prev_date,
         next_date=next_date,
+        gemini_ready=gemini_configured(),
     )
+
+
+@app.route("/admin/shifts/import", methods=["POST"])
+@admin_required
+def admin_shifts_import():
+    file = request.files.get("shift_image")
+    if not file or not file.filename:
+        flash("画像を選択してください。", "error")
+        return redirect(url_for("admin_shifts"))
+
+    if not gemini_configured():
+        flash("画像読み取りが未設定です（GEMINI_API_KEY）。管理者に連絡してください。", "error")
+        return redirect(url_for("admin_shifts"))
+
+    image_bytes = file.read()
+    mime = file.mimetype or "image/jpeg"
+
+    db = get_db()
+    casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
+    cast_names = [c["name"] for c in casts]
+    name_to_id = {c["name"]: c["id"] for c in casts}
+    year = now_jst().year
+
+    try:
+        shifts = parse_shift_image(image_bytes, mime, cast_names, year)
+    except Exception as e:
+        flash(f"画像の読み取りに失敗しました: {e}", "error")
+        return redirect(url_for("admin_shifts"))
+
+    parsed_rows = []
+    for s in shifts:
+        name = (s.get("name") or "").strip()
+        date = (s.get("date") or "").strip()
+        start = (s.get("start") or "").strip()
+        if name in name_to_id and date and start:
+            parsed_rows.append({
+                "user_id": name_to_id[name],
+                "name": name,
+                "date": date,
+                "start": start,
+            })
+
+    if not parsed_rows:
+        flash("シフトを読み取れませんでした。画像が鮮明か、キャスト名が登録名と一致しているか確認してください。", "warning")
+        return redirect(url_for("admin_shifts"))
+
+    parsed_rows.sort(key=lambda r: (r["date"], r["user_id"]))
+    session["import_shifts"] = parsed_rows
+    return redirect(url_for("admin_shifts_import_preview"))
+
+
+@app.route("/admin/shifts/import/preview")
+@admin_required
+def admin_shifts_import_preview():
+    rows = session.get("import_shifts")
+    if not rows:
+        return redirect(url_for("admin_shifts"))
+    db = get_db()
+    casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
+    return render_template("admin_shifts_import.html", rows=rows, casts=casts)
+
+
+@app.route("/admin/shifts/import/save", methods=["POST"])
+@admin_required
+def admin_shifts_import_save():
+    db = get_db()
+    count = request.form.get("row_count", 0, type=int)
+    saved = 0
+    for i in range(count):
+        if not request.form.get(f"include_{i}"):
+            continue
+        user_id = request.form.get(f"user_id_{i}", type=int)
+        s_date = request.form.get(f"date_{i}", "").strip()
+        start = request.form.get(f"start_{i}", "").strip()
+        if not user_id or not s_date or not start:
+            continue
+        db.execute(
+            """INSERT INTO shifts (user_id, business_date, shift_start)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id, business_date)
+               DO UPDATE SET shift_start = excluded.shift_start""",
+            (user_id, s_date, start),
+        )
+        saved += 1
+    db.commit()
+    session.pop("import_shifts", None)
+    flash(f"{saved}件のシフトを登録しました。", "success")
+    return redirect(url_for("admin_shifts"))
 
 
 def _calc_cast_summary(db, user_id, start_date, end_date):

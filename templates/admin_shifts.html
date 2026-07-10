@@ -48,6 +48,30 @@
 
         <div class="card mt-24">
             <div class="card-header">
+                <span class="card-title">画像からシフトを読み取る</span>
+            </div>
+            <div class="card-body">
+                {% if gemini_ready %}
+                <p style="color: var(--gray-500); font-size: 0.85rem; margin-top: 0;">
+                    シフト表の画像をアップロードすると、自動で読み取って入力候補を作成します。読み取り後に確認・修正してから登録できます。
+                </p>
+                <form method="POST" action="{{ url_for('admin_shifts_import') }}" enctype="multipart/form-data">
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <input class="form-input" type="file" name="shift_image" accept="image/*" required style="max-width: 320px;">
+                        <button type="submit" class="btn btn-primary btn-sm">画像を読み取る</button>
+                    </div>
+                    <p style="color: var(--gray-400); font-size: 0.75rem; margin-bottom: 0;">※ 読み取りに10〜30秒ほどかかることがあります。</p>
+                </form>
+                {% else %}
+                <p style="color: var(--gray-500); font-size: 0.85rem; margin: 0;">
+                    画像読み取り機能は現在利用できません（APIキーが未設定です）。
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mt-24">
+            <div class="card-header">
                 <span class="card-title">{{ view_date }} のシフト</span>
             </div>
             <div class="card-body">
