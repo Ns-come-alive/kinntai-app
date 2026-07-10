@@ -39,48 +39,88 @@ function doPost(e) {
   }
 }
 
+// 見た目の設定
+var COLOR_TITLE_BG = "#4472C4";   // 見出し帯（濃い青）
+var COLOR_TITLE_FG = "#ffffff";   // 見出し文字（白）
+var COLOR_HEADER_BG = "#d9e1f2";  // 表ヘッダー（薄い青）
+var COLOR_LABEL_BG = "#eef2f9";   // 集計ラベル（うすいグレー青）
+var COLOR_BORDER = "#9fb3d1";     // 枠線
+
 function writeCastTab_(ss, cast) {
   var sh = ss.getSheetByName(cast.tab) || ss.insertSheet(cast.tab);
   sh.clear();
+  sh.clearFormats();
 
   var row = 1;
 
-  // 月間集計ブロック
-  sh.getRange(row, 1).setValue("■ 月間集計").setFontWeight("bold");
+  // 月間集計 見出し
+  sh.getRange(row, 1, 1, 2).merge()
+    .setValue("月間集計")
+    .setFontWeight("bold").setFontSize(12)
+    .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG)
+    .setHorizontalAlignment("center");
   row++;
-  if (cast.summary && cast.summary.length > 0) {
-    sh.getRange(row, 1, cast.summary.length, 2).setValues(cast.summary);
-    row += cast.summary.length;
+
+  var summary = cast.summary || [];
+  if (summary.length > 0) {
+    var sumRange = sh.getRange(row, 1, summary.length, 2);
+    sumRange.setValues(summary);
+    sh.getRange(row, 1, summary.length, 1).setFontWeight("bold").setBackground(COLOR_LABEL_BG);
+    sumRange.setBorder(true, true, true, true, true, true, COLOR_BORDER, SpreadsheetApp.BorderStyle.SOLID);
+    row += summary.length;
   }
 
-  row++; // 空行
+  row += 1; // 空行
 
-  // 打刻履歴ブロック
-  sh.getRange(row, 1).setValue("■ 打刻履歴").setFontWeight("bold");
+  // 打刻履歴 見出し
+  var header = cast.history_header || [];
+  var width = Math.max(1, header.length);
+  sh.getRange(row, 1, 1, width).merge()
+    .setValue("打刻履歴")
+    .setFontWeight("bold").setFontSize(12)
+    .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG)
+    .setHorizontalAlignment("center");
   row++;
 
-  var header = cast.history_header || [];
+  var tableTop = row;
   if (header.length > 0) {
-    sh.getRange(row, 1, 1, header.length).setValues([header]).setFontWeight("bold");
+    sh.getRange(row, 1, 1, header.length).setValues([header])
+      .setFontWeight("bold").setBackground(COLOR_HEADER_BG)
+      .setHorizontalAlignment("center");
     row++;
   }
 
   var history = cast.history || [];
   if (history.length > 0) {
     sh.getRange(row, 1, history.length, header.length).setValues(history);
+    row += history.length;
   }
 
-  sh.autoResizeColumns(1, Math.max(2, header.length));
+  var tableRows = row - tableTop;
+  if (tableRows > 0 && header.length > 0) {
+    sh.getRange(tableTop, 1, tableRows, header.length)
+      .setBorder(true, true, true, true, true, true, COLOR_BORDER, SpreadsheetApp.BorderStyle.SOLID)
+      .setHorizontalAlignment("center");
+  }
+
+  sh.autoResizeColumns(1, width);
 }
 
 function writeSummaryTab_(ss, summary) {
   var sh = ss.getSheetByName(summary.tab) || ss.insertSheet(summary.tab);
   sh.clear();
+  sh.clearFormats();
 
   var rows = summary.rows || [];
   if (rows.length > 0) {
-    sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-    sh.getRange(1, 1, 1, rows[0].length).setFontWeight("bold");
-    sh.autoResizeColumns(1, rows[0].length);
+    var w = rows[0].length;
+    var range = sh.getRange(1, 1, rows.length, w);
+    range.setValues(rows)
+      .setBorder(true, true, true, true, true, true, COLOR_BORDER, SpreadsheetApp.BorderStyle.SOLID)
+      .setHorizontalAlignment("center");
+    sh.getRange(1, 1, 1, w).setFontWeight("bold")
+      .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG);
+    sh.setFrozenRows(1);
+    sh.autoResizeColumns(1, w);
   }
 }
