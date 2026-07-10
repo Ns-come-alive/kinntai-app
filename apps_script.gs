@@ -46,11 +46,25 @@ var COLOR_HEADER_BG = "#d9e1f2";  // 表ヘッダー（薄い青）
 var COLOR_LABEL_BG = "#eef2f9";   // 集計ラベル（うすいグレー青）
 var COLOR_BORDER = "#9fb3d1";     // 枠線
 
-// 文字幅に合わせて列幅を自動調整し、少し余白を足す
+// 文字幅（全角=2, 半角=1）に合わせて列幅を決める
 function fitColumns_(sh, numCols) {
-  sh.autoResizeColumns(1, numCols);
-  for (var c = 1; c <= numCols; c++) {
-    sh.setColumnWidth(c, sh.getColumnWidth(c) + 24);
+  var lastRow = sh.getLastRow();
+  if (lastRow < 1) return;
+  var values = sh.getRange(1, 1, lastRow, numCols).getValues();
+  for (var c = 0; c < numCols; c++) {
+    var maxLen = 0;
+    for (var r = 0; r < values.length; r++) {
+      var v = values[r][c];
+      if (v === null || v === "") continue;
+      var s = String(v);
+      var len = 0;
+      for (var i = 0; i < s.length; i++) {
+        len += (s.charCodeAt(i) > 255) ? 2 : 1;
+      }
+      if (len > maxLen) maxLen = len;
+    }
+    var width = Math.max(70, maxLen * 8 + 24);
+    sh.setColumnWidth(c + 1, width);
   }
 }
 
