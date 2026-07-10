@@ -16,6 +16,9 @@
 // アプリ側の SHEETS_WEBHOOK_SECRET と同じ合言葉を設定（空なら照合しない）
 var SECRET = "";
 
+// このコードのバージョン（デプロイ確認用）
+var VERSION = "v3-charwidth";
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -33,10 +36,15 @@ function doPost(e) {
       writeSummaryTab_(ss, data.summary);
     }
 
-    return ContentService.createTextOutput("ok");
+    return ContentService.createTextOutput("ok " + VERSION);
   } catch (err) {
     return ContentService.createTextOutput("error: " + err);
   }
+}
+
+// ブラウザ確認用（GETでバージョンを表示）
+function doGet(e) {
+  return ContentService.createTextOutput("kintai sheets webhook " + VERSION);
 }
 
 // 見た目の設定
