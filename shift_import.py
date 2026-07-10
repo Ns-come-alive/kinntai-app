@@ -15,17 +15,62 @@ import requests
 logger = logging.getLogger(__name__)
 
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+LIST_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
 
-# GEMINI_MODEL が未設定の場合、上から順に試す
+# 自動検出できなかった場合に上から順に試す候補（新しめの安定モデル）
 FALLBACK_MODELS = [
-    "gemini-2.0-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3-flash-preview",
     "gemini-2.5-flash",
-    "gemini-1.5-flash",
 ]
+
+# 一度成功したモデルを記憶して次回以降の検出を省く
+_working_model = None
 
 
 def is_configured():
     return bool(os.environ.get("GEMINI_API_KEY"))
+
+
+def _discover_models(api_key):
+    """API から generateContent に対応したモデル一覧を取得し、優先順に並べる。"""
+    try:
+        resp = requests.get(LIST_ENDPOINT, params={"key": api_key, "pageSize": 1000}, timeout=30)
+        if resp.status_code != 200:
+            return []
+        models = resp.json().get("models", [])
+    except (requests.RequestException, ValueError):
+        return []
+
+    names = []
+    for m in models:
+        if "generateContent" not in m.get("supportedGenerationMethods", []):
+            continue
+        name = m.get("name", "").replace("models/", "")
+        low = name.lower()
+        # 画像生成・音声・埋め込み等の非対象モデルを除外
+        if any(x in low for x in ["image", "tts", "audio", "embedding", "nano", "aqa", "imagen", "lyria"]):
+            continue
+        names.append(name)
+
+    def rank(n):
+        l = n.lower()
+        if "flash-latest" in l:
+            return 0
+        if "flash" in l and "lite" not in l and "preview" not in l:
+            return 1
+        if "flash-lite" in l:
+            return 2
+        if "flash" in l:
+            return 3
+        if "pro" in l:
+            return 4
+        return 5
+
+    names.sort(key=rank)
+    return names
 
 
 def _build_prompt(cast_names, year):
@@ -68,8 +113,16 @@ def parse_shift_image(image_bytes, mime_type, cast_names, year):
         "generationConfig": {"response_mime_type": "application/json"},
     }
 
+    global _working_model
+
     configured = os.environ.get("GEMINI_MODEL", "").strip()
-    models = [configured] if configured else FALLBACK_MODELS
+    if configured:
+        models = [configured]
+    elif _working_model:
+        models = [_working_model] + [m for m in FALLBACK_MODELS if m != _working_model]
+    else:
+        discovered = _discover_models(api_key)
+        models = discovered + [m for m in FALLBACK_MODELS if m not in discovered]
 
     last_error = None
     for model in models:
@@ -80,7 +133,7 @@ def parse_shift_image(image_bytes, mime_type, cast_names, year):
             last_error = f"通信エラー: {e}"
             continue
 
-        if resp.status_code == 404 or resp.status_code == 400:
+        if resp.status_code in (400, 404):
             # モデル名が使えない等 → 次の候補へ
             last_error = f"モデル {model} 応答エラー ({resp.status_code}): {resp.text[:200]}"
             logger.warning(last_error)
@@ -95,6 +148,7 @@ def parse_shift_image(image_bytes, mime_type, cast_names, year):
             data = resp.json()
             text = data["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
+            _working_model = model
             return parsed.get("shifts", [])
         except (KeyError, IndexError, ValueError) as e:
             last_error = f"応答の解析に失敗しました: {e}"
