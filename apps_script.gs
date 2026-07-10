@@ -46,6 +46,14 @@ var COLOR_HEADER_BG = "#d9e1f2";  // 表ヘッダー（薄い青）
 var COLOR_LABEL_BG = "#eef2f9";   // 集計ラベル（うすいグレー青）
 var COLOR_BORDER = "#9fb3d1";     // 枠線
 
+// 文字幅に合わせて列幅を自動調整し、少し余白を足す
+function fitColumns_(sh, numCols) {
+  sh.autoResizeColumns(1, numCols);
+  for (var c = 1; c <= numCols; c++) {
+    sh.setColumnWidth(c, sh.getColumnWidth(c) + 24);
+  }
+}
+
 function writeCastTab_(ss, cast) {
   var sh = ss.getSheetByName(cast.tab) || ss.insertSheet(cast.tab);
   sh.clear();
@@ -103,7 +111,7 @@ function writeCastTab_(ss, cast) {
       .setHorizontalAlignment("center");
   }
 
-  sh.autoResizeColumns(1, width);
+  fitColumns_(sh, width);
 }
 
 function writeSummaryTab_(ss, summary) {
@@ -121,6 +129,6 @@ function writeSummaryTab_(ss, summary) {
     sh.getRange(1, 1, 1, w).setFontWeight("bold")
       .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG);
     sh.setFrozenRows(1);
-    sh.autoResizeColumns(1, w);
+    fitColumns_(sh, w);
   }
 }
