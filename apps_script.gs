@@ -5,47 +5,15 @@
  *  1. 連携したい Google スプレッドシートを開く
  *  2. 上部メニュー「拡張機能」→「Apps Script」を開く
  *  3. このファイルの中身をすべて貼り付けて保存
- *  4. 必要なら下の SECRET を設定（アプリ側の SHEETS_WEBHOOK_SECRET と同じ値）
- *  5. 「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」
- *       - 実行するユーザー: 自分
- *       - アクセスできるユーザー: 全員
- *  6. 表示された「ウェブアプリのURL（/exec で終わる）」をアプリ側の
- *     環境変数 SHEETS_WEBHOOK_URL に設定
+ *  4. 「デプロイ」→「デプロイを管理」→ 鉛筆 → バージョン「新バージョン」→ デプロイ
+ *  5. ブラウザでウェブアプリURL(/exec)を開き、バージョン表示を確認
  */
 
-// アプリ側の SHEETS_WEBHOOK_SECRET と同じ合言葉を設定（空なら照合しない）
+// アプリ側の SHEETS_WEBHOOK_SECRET と同じ合言葉（空なら照合しない）
 var SECRET = "";
 
 // このコードのバージョン（デプロイ確認用）
-var VERSION = "v3-charwidth";
-
-function doPost(e) {
-  try {
-    var data = JSON.parse(e.postData.contents);
-
-    if (SECRET && data.secret !== SECRET) {
-      return ContentService.createTextOutput("forbidden");
-    }
-
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    if (data.cast) {
-      writeCastTab_(ss, data.cast);
-    }
-    if (data.summary) {
-      writeSummaryTab_(ss, data.summary);
-    }
-
-    return ContentService.createTextOutput("ok " + VERSION);
-  } catch (err) {
-    return ContentService.createTextOutput("error: " + err);
-  }
-}
-
-// ブラウザ確認用（GETでバージョンを表示）
-function doGet(e) {
-  return ContentService.createTextOutput("kintai sheets webhook " + VERSION);
-}
+var VERSION = "v6-final";
 
 // 見た目の設定
 var COLOR_TITLE_BG = "#4472C4";   // 見出し帯（濃い青）
@@ -54,11 +22,45 @@ var COLOR_HEADER_BG = "#d9e1f2";  // 表ヘッダー（薄い青）
 var COLOR_LABEL_BG = "#eef2f9";   // 集計ラベル（うすいグレー青）
 var COLOR_BORDER = "#9fb3d1";     // 枠線
 
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    if (SECRET && data.secret !== SECRET) {
+      return ContentService.createTextOutput("forbidden");
+    }
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (data.cast) {
+      writeCastTab_(ss, data.cast);
+    }
+    if (data.summary) {
+      writeSummaryTab_(ss, data.summary);
+    }
+    return ContentService.createTextOutput("ok " + VERSION);
+  } catch (err) {
+    return ContentService.createTextOutput("error: " + err);
+  }
+}
+
+// ブラウザ確認用（GETでバージョン表示）
+function doGet(e) {
+  return ContentService.createTextOutput("kintai sheets webhook " + VERSION);
+}
+
+// 色帯の見出し行（セル結合はしない）
+function bandRow_(sh, row, numCols, text) {
+  sh.getRange(row, 1, 1, numCols).setBackground(COLOR_TITLE_BG);
+  sh.getRange(row, 1).setValue(text)
+    .setFontWeight("bold").setFontSize(12).setFontColor(COLOR_TITLE_FG);
+}
+
 // 文字幅（全角=2, 半角=1）に合わせて列幅を決める
 function fitColumns_(sh, numCols) {
   var lastRow = sh.getLastRow();
   if (lastRow < 1) return;
-  var values = sh.getRange(1, 1, lastRow, numCols).getValues();
+  // getDisplayValues() は画面表示どおりの文字列を返す。
+  // getValues() だと日付/時刻セルが Date オブジェクトになり、
+  // "Thu Jul 09 2026 ..." のような長い文字列で幅を誤計算してしまう。
+  var values = sh.getRange(1, 1, lastRow, numCols).getDisplayValues();
   for (var c = 0; c < numCols; c++) {
     var maxLen = 0;
     for (var r = 0; r < values.length; r++) {
@@ -71,24 +73,28 @@ function fitColumns_(sh, numCols) {
       }
       if (len > maxLen) maxLen = len;
     }
-    var width = Math.max(70, maxLen * 8 + 24);
+    var width = Math.max(70, maxLen * 8 + 20);
     sh.setColumnWidth(c + 1, width);
   }
 }
 
-function writeCastTab_(ss, cast) {
-  var sh = ss.getSheetByName(cast.tab) || ss.insertSheet(cast.tab);
+// 過去バージョンで作られたセル結合を解除してからクリア
+function resetSheet_(sh) {
+  try { sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart(); } catch (e) {}
   sh.clear();
   sh.clearFormats();
+}
 
+function writeCastTab_(ss, cast) {
+  var sh = ss.getSheetByName(cast.tab) || ss.insertSheet(cast.tab);
+  resetSheet_(sh);
+
+  var header = cast.history_header || [];
+  var width = Math.max(2, header.length);
   var row = 1;
 
-  // 月間集計 見出し
-  sh.getRange(row, 1, 1, 2).merge()
-    .setValue("月間集計")
-    .setFontWeight("bold").setFontSize(12)
-    .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG)
-    .setHorizontalAlignment("center");
+  // 月間集計 見出し（結合なしの色帯）
+  bandRow_(sh, row, width, "月間集計");
   row++;
 
   var summary = cast.summary || [];
@@ -102,14 +108,8 @@ function writeCastTab_(ss, cast) {
 
   row += 1; // 空行
 
-  // 打刻履歴 見出し
-  var header = cast.history_header || [];
-  var width = Math.max(1, header.length);
-  sh.getRange(row, 1, 1, width).merge()
-    .setValue("打刻履歴")
-    .setFontWeight("bold").setFontSize(12)
-    .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG)
-    .setHorizontalAlignment("center");
+  // 打刻履歴 見出し（結合なしの色帯）
+  bandRow_(sh, row, width, "打刻履歴");
   row++;
 
   var tableTop = row;
@@ -133,13 +133,13 @@ function writeCastTab_(ss, cast) {
       .setHorizontalAlignment("center");
   }
 
+  SpreadsheetApp.flush();
   fitColumns_(sh, width);
 }
 
 function writeSummaryTab_(ss, summary) {
   var sh = ss.getSheetByName(summary.tab) || ss.insertSheet(summary.tab);
-  sh.clear();
-  sh.clearFormats();
+  resetSheet_(sh);
 
   var rows = summary.rows || [];
   if (rows.length > 0) {
@@ -151,6 +151,7 @@ function writeSummaryTab_(ss, summary) {
     sh.getRange(1, 1, 1, w).setFontWeight("bold")
       .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG);
     sh.setFrozenRows(1);
+    SpreadsheetApp.flush();
     fitColumns_(sh, w);
   }
 }

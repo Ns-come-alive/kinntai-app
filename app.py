@@ -283,6 +283,29 @@ def _calc_late_hours(shift_start, clock_in_time, punch_type="normal"):
         return 0.0
 
 
+def _work_minutes(clock_in, clock_out):
+    """出勤〜退勤の勤務分数を返す（日跨ぎ対応）。計算不可なら None。"""
+    if not clock_in or not clock_out:
+        return None
+    try:
+        ci = datetime.strptime(clock_in, "%H:%M:%S")
+        co = datetime.strptime(clock_out, "%H:%M:%S")
+        if co < ci:
+            co += timedelta(days=1)
+        return int((co - ci).total_seconds() // 60)
+    except (ValueError, TypeError):
+        return None
+
+
+def _calc_work_hours(clock_in, clock_out):
+    """勤務時間を15分刻み（切り捨て）で算出。
+    例: 1時間10分 → 1.0時間、1時間20分 → 1.25時間。"""
+    minutes = _work_minutes(clock_in, clock_out)
+    if minutes is None:
+        return None
+    return (minutes // 15) * 0.25
+
+
 LATE_REASONS = ["交通機関の遅延", "体調不良", "その他"]
 
 
@@ -379,19 +402,6 @@ def clock_out():
     if not active:
         flash("出勤記録がありません。", "error")
         return redirect(url_for("dashboard"))
-
-    clock_in_str = active["clock_in"]
-    try:
-        ci = datetime.strptime(clock_in_str, "%H:%M:%S")
-        co = datetime.strptime(clock_time, "%H:%M:%S")
-        # 日跨ぎ: 退勤が出勤より小さい場合は翌日
-        if co < ci:
-            diff = (co + timedelta(days=1) - ci).total_seconds()
-        else:
-            diff = (co - ci).total_seconds()
-        hours = round(diff / 3600, 2)
-    except (ValueError, TypeError):
-        hours = 0
 
     db.execute(
         "UPDATE attendance SET clock_out = ? WHERE id = ?",
@@ -638,7 +648,7 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
     working_dates = set()
     absent_dates = set()
     total_late_hours = 0.0
-    total_work_seconds = 0
+    total_work_hours = 0.0
 
     for r in records:
         if r["punch_type"] == "absent":
@@ -655,21 +665,13 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
             if shift:
                 total_late_hours += _calc_late_hours(shift["shift_start"], r["clock_in"], r["punch_type"])
 
-        if r["clock_in"] and r["clock_out"]:
-            try:
-                ci = datetime.strptime(r["clock_in"], "%H:%M:%S")
-                co = datetime.strptime(r["clock_out"], "%H:%M:%S")
-                if co < ci:
-                    diff = (co + timedelta(days=1) - ci).total_seconds()
-                else:
-                    diff = (co - ci).total_seconds()
-                total_work_seconds += diff
-            except (ValueError, TypeError):
-                pass
+        wh = _calc_work_hours(r["clock_in"], r["clock_out"])
+        if wh is not None:
+            total_work_hours += wh
 
     return {
         "total_days": len(working_dates),
-        "total_work_hours": round(total_work_seconds / 3600, 1),
+        "total_work_hours": round(total_work_hours, 2),
         "total_late_hours": total_late_hours,
         "absent_days": len(absent_dates),
     }
@@ -713,18 +715,8 @@ def _cast_history_rows(db, user_id, start_date, end_date):
 
     rows = []
     for r in records:
-        work = ""
-        if r["clock_in"] and r["clock_out"]:
-            try:
-                ci = datetime.strptime(r["clock_in"], "%H:%M:%S")
-                co = datetime.strptime(r["clock_out"], "%H:%M:%S")
-                if co < ci:
-                    diff = (co + timedelta(days=1) - ci).total_seconds()
-                else:
-                    diff = (co - ci).total_seconds()
-                work = round(diff / 3600, 2)
-            except (ValueError, TypeError):
-                work = ""
+        wh = _calc_work_hours(r["clock_in"], r["clock_out"])
+        work = wh if wh is not None else ""
         rows.append([
             r["business_date"],
             r["clock_in"] or "",
