@@ -37,7 +37,11 @@
             <div class="card-body">
                 <form method="GET" action="{{ url_for('admin_shifts') }}" id="date-select-form" class="date-selector">
                     <label class="form-label">営業日を選択:</label>
-                    <input class="form-input" type="date" name="date" value="{{ view_date }}" id="date-picker" style="max-width: 200px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <a href="{{ url_for('admin_shifts', date=prev_date) }}" class="btn btn-outline btn-sm" title="前日" style="font-weight: bold;">&#9664;</a>
+                        <input class="form-input" type="date" name="date" value="{{ view_date }}" id="date-picker" style="max-width: 200px;">
+                        <a href="{{ url_for('admin_shifts', date=next_date) }}" class="btn btn-outline btn-sm" title="翌日" style="font-weight: bold;">&#9654;</a>
+                    </div>
                 </form>
             </div>
         </div>

@@ -510,6 +510,14 @@ def admin_shifts():
     view_date = request.args.get("date", get_business_date())
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
 
+    try:
+        view_dt = datetime.strptime(view_date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        view_dt = datetime.strptime(get_business_date(), "%Y-%m-%d")
+        view_date = view_dt.strftime("%Y-%m-%d")
+    prev_date = (view_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    next_date = (view_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+
     shifts = {}
     for c in casts:
         s = db.execute(
@@ -523,6 +531,8 @@ def admin_shifts():
         casts=casts,
         shifts=shifts,
         view_date=view_date,
+        prev_date=prev_date,
+        next_date=next_date,
     )
 
 
