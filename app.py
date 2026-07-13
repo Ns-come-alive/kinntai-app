@@ -696,53 +696,13 @@ def _month_range(business_date):
     return start, end
 
 
-def _punch_type_label(punch_type):
-    if punch_type == "douhan":
-        return "同伴"
-    if punch_type == "absent":
-        return "当欠"
-    return "通常"
-
-
-def _cast_history_rows(db, user_id, start_date, end_date):
-    """キャスト1人の月間打刻履歴を行データにして返す。"""
-    records = db.execute(
-        """SELECT * FROM attendance
-           WHERE user_id = ? AND business_date >= ? AND business_date < ?
-           ORDER BY business_date, id""",
-        (user_id, start_date, end_date),
-    ).fetchall()
-
-    rows = []
-    for r in records:
-        wh = _calc_work_hours(r["clock_in"], r["clock_out"])
-        work = wh if wh is not None else ""
-        rows.append([
-            r["business_date"],
-            r["clock_in"] or "",
-            r["clock_out"] or "",
-            work,
-            _punch_type_label(r["punch_type"]),
-            r["status"] or "",
-            r["late_reason"] or "",
-        ])
-    return rows
-
-
 def _sync_sheets(db, user_id, business_date):
-    """指定キャスト・該当月のタブと、全員月間集計タブを最新化して送信する。"""
+    """全員分の月間集計タブを最新化して送信する。"""
     if not sheets.is_configured():
         return
     try:
         start_date, end_date = _month_range(business_date)
         label = _month_label(business_date)
-
-        cast = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not cast:
-            return
-
-        summary = _calc_cast_summary(db, user_id, start_date, end_date)
-        history = _cast_history_rows(db, user_id, start_date, end_date)
 
         casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
         summary_rows = [["キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "欠勤日数"]]
@@ -755,17 +715,6 @@ def _sync_sheets(db, user_id, business_date):
 
         payload = {
             "month_label": label,
-            "cast": {
-                "tab": f"{cast['name']} {label}",
-                "summary": [
-                    ["出勤日数", summary["total_days"]],
-                    ["総稼働時間(h)", summary["total_work_hours"]],
-                    ["遅刻時間(h)", summary["total_late_hours"]],
-                    ["欠勤日数", summary["absent_days"]],
-                ],
-                "history_header": ["営業日", "出勤", "退勤", "稼働(h)", "種別", "ステータス", "遅刻理由"],
-                "history": history,
-            },
             "summary": {
                 "tab": f"月間集計 {label}",
                 "rows": summary_rows,
