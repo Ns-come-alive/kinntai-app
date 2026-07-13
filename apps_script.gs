@@ -13,7 +13,7 @@
 var SECRET = "";
 
 // このコードのバージョン（デプロイ確認用）
-var VERSION = "v6-final";
+var VERSION = "v7-summary-history";
 
 // 見た目の設定
 var COLOR_TITLE_BG = "#4472C4";   // 見出し帯（濃い青）
@@ -141,17 +141,50 @@ function writeSummaryTab_(ss, summary) {
   var sh = ss.getSheetByName(summary.tab) || ss.insertSheet(summary.tab);
   resetSheet_(sh);
 
-  var rows = summary.rows || [];
+  var rows = summary.rows || [];        // 全員集計（1行目が見出し）
+  var header = summary.history_header || [];
+  var history = summary.history || [];
+  var sumCols = rows.length > 0 ? rows[0].length : 0;
+  var maxCols = Math.max(sumCols, header.length, 2);
+  var row = 1;
+
+  // 月間集計 見出し帯
+  bandRow_(sh, row, maxCols, "月間集計");
+  row++;
+
   if (rows.length > 0) {
-    var w = rows[0].length;
-    var range = sh.getRange(1, 1, rows.length, w);
+    var range = sh.getRange(row, 1, rows.length, sumCols);
     range.setValues(rows)
       .setBorder(true, true, true, true, true, true, COLOR_BORDER, SpreadsheetApp.BorderStyle.SOLID)
       .setHorizontalAlignment("center");
-    sh.getRange(1, 1, 1, w).setFontWeight("bold")
-      .setBackground(COLOR_TITLE_BG).setFontColor(COLOR_TITLE_FG);
-    sh.setFrozenRows(1);
-    SpreadsheetApp.flush();
-    fitColumns_(sh, w);
+    sh.getRange(row, 1, 1, sumCols).setFontWeight("bold").setBackground(COLOR_HEADER_BG);
+    row += rows.length;
   }
+
+  row += 1; // 空行
+
+  // 打刻履歴 見出し帯
+  bandRow_(sh, row, maxCols, "打刻履歴");
+  row++;
+
+  var tableTop = row;
+  if (header.length > 0) {
+    sh.getRange(row, 1, 1, header.length).setValues([header])
+      .setFontWeight("bold").setBackground(COLOR_HEADER_BG)
+      .setHorizontalAlignment("center");
+    row++;
+  }
+  if (history.length > 0) {
+    sh.getRange(row, 1, history.length, header.length).setValues(history);
+    row += history.length;
+  }
+  var tableRows = row - tableTop;
+  if (tableRows > 0 && header.length > 0) {
+    sh.getRange(tableTop, 1, tableRows, header.length)
+      .setBorder(true, true, true, true, true, true, COLOR_BORDER, SpreadsheetApp.BorderStyle.SOLID)
+      .setHorizontalAlignment("center");
+  }
+
+  SpreadsheetApp.flush();
+  fitColumns_(sh, maxCols);
 }

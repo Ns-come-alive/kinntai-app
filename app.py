@@ -696,8 +696,16 @@ def _month_range(business_date):
     return start, end
 
 
+def _punch_type_label(punch_type):
+    if punch_type == "douhan":
+        return "同伴"
+    if punch_type == "absent":
+        return "当欠"
+    return "通常"
+
+
 def _sync_sheets(db, user_id, business_date):
-    """全員分の月間集計タブを最新化して送信する。"""
+    """全員分の月間集計タブ（集計＋打刻履歴）を最新化して送信する。"""
     if not sheets.is_configured():
         return
     try:
@@ -706,6 +714,7 @@ def _sync_sheets(db, user_id, business_date):
 
         casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
         summary_rows = [["キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "欠勤日数"]]
+        history_rows = []
         for c in casts:
             s = _calc_cast_summary(db, c["id"], start_date, end_date)
             summary_rows.append([
@@ -713,11 +722,38 @@ def _sync_sheets(db, user_id, business_date):
                 s["total_late_hours"], s["absent_days"],
             ])
 
+            records = db.execute(
+                """SELECT * FROM attendance
+                   WHERE user_id = ? AND business_date >= ? AND business_date < ?
+                   ORDER BY business_date, id""",
+                (c["id"], start_date, end_date),
+            ).fetchall()
+            for r in records:
+                wh = _calc_work_hours(r["clock_in"], r["clock_out"])
+                history_rows.append([
+                    r["business_date"],
+                    c["name"],
+                    r["clock_in"] or "",
+                    r["clock_out"] or "",
+                    wh if wh is not None else "",
+                    _punch_type_label(r["punch_type"]),
+                    r["status"] or "",
+                    r["late_reason"] or "",
+                ])
+
+        # 営業日→キャスト名の順に並べ替え
+        history_rows.sort(key=lambda row: (row[0], row[1]))
+
         payload = {
             "month_label": label,
             "summary": {
                 "tab": f"月間集計 {label}",
                 "rows": summary_rows,
+                "history_header": [
+                    "営業日", "キャスト", "出勤", "退勤",
+                    "稼働(h)", "種別", "ステータス", "遅刻理由",
+                ],
+                "history": history_rows,
             },
         }
         sheets.push(payload)
