@@ -1,12 +1,14 @@
 name: Daily absence check
 
-# 毎日 08:00 JST（= 23:00 UTC）に当欠を自動判定する。
+# 毎日 09:00 JST（= 00:00 UTC）に当欠を自動判定する。
 # 事前に GitHub リポジトリの Secrets に CRON_SECRET を登録し、
 # Render 側の環境変数 CRON_SECRET にも同じ値を設定しておくこと。
+# ※ GitHub Actions のスケジュールは数分〜十数分遅延することがあるが、
+#   エンドポイント側は「前夜の営業日」を対象にするため遅延の影響を受けない。
 
 on:
   schedule:
-    - cron: "0 23 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 env:

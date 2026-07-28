@@ -1070,7 +1070,10 @@ def cron_check_absent():
         return "forbidden", 403
 
     db = get_db()
-    business_date = get_business_date()
+    # 毎朝9:00頃の実行を想定。直近で終了した「前夜の営業日」を対象にする。
+    # get_business_date() は 09:00 ちょうど以降だと当日を返してしまい、
+    # かつ外部スケジューラは遅延しがちなので、明示的に前日（前夜のセッション）を対象にする。
+    business_date = (now_jst() - timedelta(days=1)).strftime("%Y-%m-%d")
     count = _run_absent_check(db, business_date)
     logger.info("cron当欠判定: %s に %d 件を記録", business_date, count)
     return jsonify({"ok": True, "business_date": business_date, "absent_added": count}), 200
