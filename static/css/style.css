@@ -157,6 +157,8 @@ body {
 .btn-danger:hover { background: var(--danger-hover); }
 .btn-douhan { background: var(--douhan); color: white; }
 .btn-douhan:hover { background: var(--douhan-hover); }
+.btn-pickup { background: #0ea5e9; color: white; }
+.btn-pickup:hover { background: #0284c7; }
 .btn-outline { background: white; color: var(--gray-700); border: 1.5px solid var(--gray-300); }
 .btn-outline:hover { background: var(--gray-50); border-color: var(--gray-400); }
 .btn-sm { padding: 6px 14px; font-size: .8125rem; }

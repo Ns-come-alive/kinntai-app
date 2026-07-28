@@ -99,8 +99,28 @@ def _build_prompt(cast_names, year):
     )
 
 
-def parse_shift_image(image_bytes, mime_type, cast_names, year):
-    """画像からシフト情報を抽出して [{date, name, start}, ...] を返す。"""
+def _build_driver_prompt(year):
+    return (
+        "この画像は送迎ドライバーの勤務シフト表です。ドライバーが出勤する（送迎を行う）日をすべて読み取ってください。\n"
+        "【表の構造】\n"
+        "- 表の一番上の行に日付の数字(1〜31)、その下の行に曜日が並ぶことが多いです。\n"
+        "- 左端の列にドライバー名が縦に並ぶことがあります。名前が無い場合は空文字にしてください。\n"
+        "- 表の上部のタイトルに対象期間（例: 2026/07/01 － 2026/07/15）が書かれていれば、年と月はそこから判断してください。\n"
+        "【セルの読み方】\n"
+        "- 記号・時刻・◯などで『出勤』が示されているセルの日付を出勤日として扱ってください。\n"
+        "- 空欄のセルはその日は休み（送迎なし）です。含めないでください。\n"
+        "- セルの色は無視してください。\n"
+        "【出力ルール】\n"
+        "- 出勤日は YYYY-MM-DD 形式にしてください。\n"
+        "- 同じ日に複数のドライバーが出勤している場合は、それぞれ1行ずつ出力してください。\n"
+        f"（年月がどうしても判断できない場合のみ {year} 年として扱ってください）\n"
+        "次のJSON形式のみで返してください（説明文は不要）:\n"
+        '{"shifts": [{"date": "YYYY-MM-DD", "name": "ドライバー名(不明なら空)"}]}'
+    )
+
+
+def _generate(prompt, image_bytes, mime_type):
+    """プロンプトと画像を Gemini に送り、返ってきた JSON を dict で返す。"""
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY が設定されていません。RenderのEnvironmentに設定してください。")
@@ -108,7 +128,6 @@ def parse_shift_image(image_bytes, mime_type, cast_names, year):
     if not mime_type or not mime_type.startswith("image/"):
         mime_type = "image/jpeg"
 
-    prompt = _build_prompt(cast_names, year)
     payload = {
         "contents": [{
             "parts": [
@@ -158,10 +177,22 @@ def parse_shift_image(image_bytes, mime_type, cast_names, year):
             text = data["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
             _working_model = model
-            return parsed.get("shifts", [])
+            return parsed
         except (KeyError, IndexError, ValueError) as e:
             last_error = f"応答の解析に失敗しました: {e}"
             logger.warning(last_error)
             continue
 
     raise RuntimeError(last_error or "画像の読み取りに失敗しました。")
+
+
+def parse_shift_image(image_bytes, mime_type, cast_names, year):
+    """画像からキャストのシフト情報を抽出して [{date, name, start}, ...] を返す。"""
+    parsed = _generate(_build_prompt(cast_names, year), image_bytes, mime_type)
+    return parsed.get("shifts", [])
+
+
+def parse_driver_shift_image(image_bytes, mime_type, year):
+    """画像から送迎ドライバーの出勤日を抽出して [{date, name}, ...] を返す。"""
+    parsed = _generate(_build_driver_prompt(year), image_bytes, mime_type)
+    return parsed.get("shifts", [])

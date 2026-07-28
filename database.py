@@ -87,6 +87,31 @@ def init_db():
         )
     """)
 
+    # 送迎（ピックアップ）記録。1営業日1回まで。
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS pickups (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            business_date TEXT NOT NULL,
+            clock_time TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, business_date)
+        )
+    """)
+
+    # 送迎ドライバーのシフト（その営業日に送迎ありかどうか）。
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS driver_shifts (
+            id SERIAL PRIMARY KEY,
+            business_date TEXT NOT NULL,
+            driver_name TEXT DEFAULT '',
+            UNIQUE(business_date, driver_name)
+        )
+    """)
+
+    # 既存DB向け: キャストの送迎料金（500 or 1000、既定1000）。
+    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS pickup_fee INTEGER DEFAULT 1000")
+
     db.commit()
 
     user_count = db.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]

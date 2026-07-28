@@ -53,6 +53,14 @@
                 <div class="label">欠勤日数</div>
                 <div class="value {% if absent_days > 0 %}summary-danger{% endif %}">{{ absent_days }}<span class="unit">日</span></div>
             </div>
+            <div class="summary-card">
+                <div class="label">送迎回数</div>
+                <div class="value">{{ pickup_count }}<span class="unit">回</span></div>
+            </div>
+            <div class="summary-card">
+                <div class="label">送迎料金</div>
+                <div class="value">{{ "{:,}".format(pickup_amount) }}<span class="unit">円</span></div>
+            </div>
         </div>
 
         <div class="card">

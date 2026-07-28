@@ -73,6 +73,22 @@
                         </form>
                     {% endif %}
                 </div>
+
+                {% if driver_available %}
+                <div class="action-buttons" style="margin-top: 12px;">
+                    <form method="POST" action="{{ url_for('pickup_toggle') }}" style="grid-column: 1 / -1;">
+                        {% if pickup_done %}
+                        <button type="submit" class="btn btn-outline btn-lg btn-block">
+                            <span class="btn-icon">&#9989;</span> 送迎あり（タップで取り消し）
+                        </button>
+                        {% else %}
+                        <button type="submit" class="btn btn-pickup btn-lg btn-block">
+                            <span class="btn-icon">&#128667;</span> 送迎
+                        </button>
+                        {% endif %}
+                    </form>
+                </div>
+                {% endif %}
             </div>
         </div>
 

@@ -13,6 +13,7 @@
             <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
             <a href="{{ url_for('admin_history') }}" class="navbar-link">出勤履歴</a>
             <a href="{{ url_for('admin_casts') }}" class="navbar-link active">キャスト管理</a>
+            <a href="{{ url_for('admin_drivers') }}" class="navbar-link">送迎ドライバー</a>
             <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
         </div>
     </nav>
@@ -38,10 +39,17 @@
                 <span class="card-title">キャストを追加</span>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('admin_cast_add') }}" style="display: flex; gap: 12px; align-items: flex-end;">
-                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                <form method="POST" action="{{ url_for('admin_cast_add') }}" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 160px;">
                         <label class="form-label">名前</label>
                         <input class="form-input" type="text" name="name" placeholder="キャスト名を入力" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">送迎料金</label>
+                        <select class="form-input" name="pickup_fee" style="max-width: 120px;">
+                            <option value="1000" selected>1,000円</option>
+                            <option value="500">500円</option>
+                        </select>
                     </div>
                     <button type="submit" class="btn btn-success">追加</button>
                 </form>
@@ -59,6 +67,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>名前</th>
+                                <th>送迎料金</th>
                                 <th>登録日</th>
                                 <th></th>
                             </tr>
@@ -66,15 +75,25 @@
                         <tbody>
                             {% if casts|length == 0 %}
                             <tr>
-                                <td colspan="4" style="text-align: center; padding: 32px; color: var(--gray-400);">
+                                <td colspan="5" style="text-align: center; padding: 32px; color: var(--gray-400);">
                                     キャストが登録されていません
                                 </td>
                             </tr>
                             {% endif %}
                             {% for c in casts %}
+                            {% set fee = c.pickup_fee if c.pickup_fee is not none else 1000 %}
                             <tr>
                                 <td>{{ c.id }}</td>
                                 <td style="font-weight: 600;">{{ c.name }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('admin_cast_fee', cast_id=c.id) }}" style="display: flex; gap: 6px; align-items: center;">
+                                        <select class="form-input" name="pickup_fee" style="max-width: 110px; padding: 4px 8px;">
+                                            <option value="1000" {% if fee == 1000 %}selected{% endif %}>1,000円</option>
+                                            <option value="500" {% if fee == 500 %}selected{% endif %}>500円</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-outline btn-sm">保存</button>
+                                    </form>
+                                </td>
                                 <td>{{ c.created_at or '-' }}</td>
                                 <td style="text-align: right;">
                                     <form method="POST" action="{{ url_for('admin_cast_delete', cast_id=c.id) }}" style="display: inline;">

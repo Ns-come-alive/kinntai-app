@@ -21,7 +21,9 @@ from flask import (
 
 from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
 import sheets
-from shift_import import parse_shift_image, is_configured as gemini_configured
+from shift_import import (
+    parse_shift_image, parse_driver_shift_image, is_configured as gemini_configured
+)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
@@ -201,12 +203,24 @@ def dashboard():
         if last["clock_out"] is None:
             currently_working = True
 
+    # 送迎: 本日ドライバーが出勤していれば送迎ボタンを表示。1営業日1回まで。
+    driver_available = db.execute(
+        "SELECT 1 FROM driver_shifts WHERE business_date = ? LIMIT 1",
+        (business_date,),
+    ).fetchone() is not None
+    pickup_done = db.execute(
+        "SELECT 1 FROM pickups WHERE user_id = ? AND business_date = ? LIMIT 1",
+        (user_id, business_date),
+    ).fetchone() is not None
+
     return render_template(
         "dashboard.html",
         records=records,
         shift=shift,
         business_date=business_date,
         currently_working=currently_working,
+        driver_available=driver_available,
+        pickup_done=pickup_done,
     )
 
 
@@ -415,6 +429,46 @@ def clock_out():
     return redirect(url_for("dashboard"))
 
 
+# --------------- 送迎 ---------------
+
+@app.route("/pickup", methods=["POST"])
+@login_required
+def pickup_toggle():
+    """送迎の記録／取り消し（1営業日1回まで）。"""
+    db = get_db()
+    user_id = session["user_id"]
+    now = now_jst()
+    business_date = get_business_date(now)
+
+    driver_available = db.execute(
+        "SELECT 1 FROM driver_shifts WHERE business_date = ? LIMIT 1",
+        (business_date,),
+    ).fetchone()
+    if not driver_available:
+        flash("本日は送迎ドライバーが出勤していないため、送迎を記録できません。", "warning")
+        return redirect(url_for("dashboard"))
+
+    existing = db.execute(
+        "SELECT id FROM pickups WHERE user_id = ? AND business_date = ?",
+        (user_id, business_date),
+    ).fetchone()
+
+    if existing:
+        db.execute("DELETE FROM pickups WHERE id = ?", (existing["id"],))
+        db.commit()
+        flash("送迎を取り消しました。", "success")
+    else:
+        db.execute(
+            "INSERT INTO pickups (user_id, business_date, clock_time) VALUES (?, ?, ?)",
+            (user_id, business_date, now.strftime("%H:%M:%S")),
+        )
+        db.commit()
+        flash("送迎を記録しました。", "success")
+
+    _sync_sheets(db, user_id, business_date)
+    return redirect(url_for("dashboard"))
+
+
 # --------------- Cast History ---------------
 
 @app.route("/history")
@@ -450,6 +504,8 @@ def history():
         total_work_hours=summary["total_work_hours"],
         total_late_hours=summary["total_late_hours"],
         absent_days=summary["absent_days"],
+        pickup_count=summary["pickup_count"],
+        pickup_amount=summary["pickup_amount"],
     )
 
 
@@ -636,6 +692,133 @@ def admin_shifts_import_save():
     return redirect(url_for("admin_shifts"))
 
 
+# --------------- 送迎ドライバーのシフト ---------------
+
+@app.route("/admin/drivers")
+@admin_required
+def admin_drivers():
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM driver_shifts ORDER BY business_date DESC, driver_name"
+    ).fetchall()
+    return render_template(
+        "admin_drivers.html",
+        rows=rows,
+        today=get_business_date(),
+        gemini_ready=gemini_configured(),
+    )
+
+
+@app.route("/admin/drivers/add", methods=["POST"])
+@admin_required
+def admin_driver_add():
+    business_date = request.form.get("business_date", "").strip()
+    driver_name = request.form.get("driver_name", "").strip()
+    if not business_date:
+        flash("日付を指定してください。", "error")
+        return redirect(url_for("admin_drivers"))
+
+    db = get_db()
+    db.execute(
+        """INSERT INTO driver_shifts (business_date, driver_name)
+           VALUES (?, ?)
+           ON CONFLICT(business_date, driver_name) DO NOTHING""",
+        (business_date, driver_name),
+    )
+    db.commit()
+    flash(f"{business_date} の送迎を登録しました。", "success")
+    return redirect(url_for("admin_drivers"))
+
+
+@app.route("/admin/drivers/delete/<int:driver_shift_id>", methods=["POST"])
+@admin_required
+def admin_driver_delete(driver_shift_id):
+    db = get_db()
+    db.execute("DELETE FROM driver_shifts WHERE id = ?", (driver_shift_id,))
+    db.commit()
+    flash("送迎の登録を削除しました。", "success")
+    return redirect(url_for("admin_drivers"))
+
+
+@app.route("/admin/drivers/import", methods=["POST"])
+@admin_required
+def admin_drivers_import():
+    file = request.files.get("shift_image")
+    if not file or not file.filename:
+        flash("画像を選択してください。", "error")
+        return redirect(url_for("admin_drivers"))
+
+    if not gemini_configured():
+        flash("画像読み取りが未設定です（GEMINI_API_KEY）。管理者に連絡してください。", "error")
+        return redirect(url_for("admin_drivers"))
+
+    image_bytes = file.read()
+    mime = file.mimetype or "image/jpeg"
+    year = now_jst().year
+
+    try:
+        shifts = parse_driver_shift_image(image_bytes, mime, year)
+    except Exception as e:
+        flash(f"画像の読み取りに失敗しました: {e}", "error")
+        return redirect(url_for("admin_drivers"))
+
+    parsed_rows = []
+    seen = set()
+    for s in shifts:
+        s_date = (s.get("date") or "").strip()
+        name = (s.get("name") or "").strip()
+        if not s_date:
+            continue
+        key = (s_date, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        parsed_rows.append({"date": s_date, "name": name})
+
+    if not parsed_rows:
+        flash("送迎シフトを読み取れませんでした。画像が鮮明か確認してください。", "warning")
+        return redirect(url_for("admin_drivers"))
+
+    parsed_rows.sort(key=lambda r: (r["date"], r["name"]))
+    session["import_driver_shifts"] = parsed_rows
+    return redirect(url_for("admin_drivers_import_preview"))
+
+
+@app.route("/admin/drivers/import/preview")
+@admin_required
+def admin_drivers_import_preview():
+    rows = session.get("import_driver_shifts")
+    if not rows:
+        return redirect(url_for("admin_drivers"))
+    return render_template("admin_drivers_import.html", rows=rows)
+
+
+@app.route("/admin/drivers/import/save", methods=["POST"])
+@admin_required
+def admin_drivers_import_save():
+    db = get_db()
+    count = request.form.get("row_count", 0, type=int)
+    saved = 0
+    for i in range(count):
+        if not request.form.get(f"include_{i}"):
+            continue
+        s_date = request.form.get(f"date_{i}", "").strip()
+        name = request.form.get(f"name_{i}", "").strip()
+        if not s_date:
+            continue
+        db.execute(
+            """INSERT INTO driver_shifts (business_date, driver_name)
+               VALUES (?, ?)
+               ON CONFLICT(business_date, driver_name) DO NOTHING""",
+            (s_date, name),
+        )
+        saved += 1
+    db.commit()
+    session.pop("import_driver_shifts", None)
+    flash(f"{saved}件の送迎シフトを登録しました。", "success")
+    return redirect(url_for("admin_drivers"))
+
+
 def _calc_cast_summary(db, user_id, start_date, end_date):
     """キャスト1人分の月間集計を計算"""
     records = db.execute(
@@ -669,11 +852,23 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
         if wh is not None:
             total_work_hours += wh
 
+    pickup_count = db.execute(
+        """SELECT COUNT(*) as cnt FROM pickups
+           WHERE user_id = ? AND business_date >= ? AND business_date < ?""",
+        (user_id, start_date, end_date),
+    ).fetchone()["cnt"]
+
+    fee_row = db.execute("SELECT pickup_fee FROM users WHERE id = ?", (user_id,)).fetchone()
+    pickup_fee = fee_row["pickup_fee"] if fee_row and fee_row["pickup_fee"] is not None else 1000
+
     return {
         "total_days": len(working_dates),
         "total_work_hours": round(total_work_hours, 2),
         "total_late_hours": total_late_hours,
         "absent_days": len(absent_dates),
+        "pickup_count": pickup_count,
+        "pickup_fee": pickup_fee,
+        "pickup_amount": pickup_count * pickup_fee,
     }
 
 
@@ -713,13 +908,17 @@ def _sync_sheets(db, user_id, business_date):
         label = _month_label(business_date)
 
         casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
-        summary_rows = [["キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "欠勤日数"]]
+        summary_rows = [[
+            "キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "欠勤日数",
+            "送迎回数", "送迎料金(円)",
+        ]]
         history_rows = []
         for c in casts:
             s = _calc_cast_summary(db, c["id"], start_date, end_date)
             summary_rows.append([
                 c["name"], s["total_days"], s["total_work_hours"],
                 s["total_late_hours"], s["absent_days"],
+                s["pickup_count"], s["pickup_amount"],
             ])
 
             records = db.execute(
@@ -889,15 +1088,42 @@ def admin_cast_add():
         flash("名前を入力してください。", "error")
         return redirect(url_for("admin_casts"))
 
+    pickup_fee = request.form.get("pickup_fee", 1000, type=int)
+    if pickup_fee not in (500, 1000):
+        pickup_fee = 1000
+
     db = get_db()
     existing = db.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
     if existing:
         flash(f"「{name}」は既に登録されています。", "error")
         return redirect(url_for("admin_casts"))
 
-    db.execute("INSERT INTO users (name, is_admin) VALUES (?, 0)", (name,))
+    db.execute(
+        "INSERT INTO users (name, is_admin, pickup_fee) VALUES (?, 0, ?)",
+        (name, pickup_fee),
+    )
     db.commit()
     flash(f"「{name}」を追加しました。", "success")
+    return redirect(url_for("admin_casts"))
+
+
+@app.route("/admin/casts/fee/<int:cast_id>", methods=["POST"])
+@admin_required
+def admin_cast_fee(cast_id):
+    pickup_fee = request.form.get("pickup_fee", type=int)
+    if pickup_fee not in (500, 1000):
+        flash("送迎料金は500円か1000円を選択してください。", "error")
+        return redirect(url_for("admin_casts"))
+
+    db = get_db()
+    cast = db.execute("SELECT * FROM users WHERE id = ? AND is_admin = 0", (cast_id,)).fetchone()
+    if not cast:
+        flash("キャストが見つかりません。", "error")
+        return redirect(url_for("admin_casts"))
+
+    db.execute("UPDATE users SET pickup_fee = ? WHERE id = ?", (pickup_fee, cast_id))
+    db.commit()
+    flash(f"「{cast['name']}」の送迎料金を{pickup_fee}円に設定しました。", "success")
     return redirect(url_for("admin_casts"))
 
 

@@ -13,6 +13,7 @@
             <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
             <a href="{{ url_for('admin_history') }}" class="navbar-link active">出勤履歴</a>
             <a href="{{ url_for('admin_casts') }}" class="navbar-link">キャスト管理</a>
+            <a href="{{ url_for('admin_drivers') }}" class="navbar-link">送迎ドライバー</a>
             <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
         </div>
     </nav>
@@ -87,6 +88,14 @@
                         <div class="summary-card">
                             <div class="label">欠勤日数</div>
                             <div class="value {% if s.absent_days > 0 %}summary-danger{% endif %}">{{ s.absent_days }}<span class="unit">日</span></div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">送迎回数</div>
+                            <div class="value">{{ s.pickup_count }}<span class="unit">回</span></div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">送迎料金</div>
+                            <div class="value">{{ "{:,}".format(s.pickup_amount) }}<span class="unit">円</span></div>
                         </div>
                     </div>
                 </div>
