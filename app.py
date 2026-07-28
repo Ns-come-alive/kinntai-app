@@ -745,19 +745,24 @@ def admin_driver_delete(driver_shift_id):
 def admin_drivers_import():
     file = request.files.get("shift_image")
     if not file or not file.filename:
-        flash("画像を選択してください。", "error")
+        flash("画像またはPDFを選択してください。", "error")
         return redirect(url_for("admin_drivers"))
 
     if not gemini_configured():
-        flash("画像読み取りが未設定です（GEMINI_API_KEY）。管理者に連絡してください。", "error")
+        flash("読み取り機能が未設定です（GEMINI_API_KEY）。管理者に連絡してください。", "error")
         return redirect(url_for("admin_drivers"))
 
-    image_bytes = file.read()
-    mime = file.mimetype or "image/jpeg"
+    file_bytes = file.read()
+    mime = (file.mimetype or "").lower()
+    fname = (file.filename or "").lower()
+    if fname.endswith(".pdf") or mime == "application/pdf":
+        mime = "application/pdf"
+    elif not mime.startswith("image/"):
+        mime = "image/jpeg"
     year = now_jst().year
 
     try:
-        shifts = parse_driver_shift_image(image_bytes, mime, year)
+        shifts = parse_driver_shift_image(file_bytes, mime, year)
     except Exception as e:
         flash(f"画像の読み取りに失敗しました: {e}", "error")
         return redirect(url_for("admin_drivers"))

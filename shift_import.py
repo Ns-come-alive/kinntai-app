@@ -101,7 +101,7 @@ def _build_prompt(cast_names, year):
 
 def _build_driver_prompt(year):
     return (
-        "この画像は送迎ドライバーの勤務シフト表です。ドライバーが出勤する（送迎を行う）日をすべて読み取ってください。\n"
+        "この画像またはPDFは送迎ドライバーの勤務シフト表です。ドライバーが出勤する（送迎を行う）日をすべて読み取ってください。\n"
         "【表の構造】\n"
         "- 表の一番上の行に日付の数字(1〜31)、その下の行に曜日が並ぶことが多いです。\n"
         "- 左端の列にドライバー名が縦に並ぶことがあります。名前が無い場合は空文字にしてください。\n"
@@ -120,12 +120,13 @@ def _build_driver_prompt(year):
 
 
 def _generate(prompt, image_bytes, mime_type):
-    """プロンプトと画像を Gemini に送り、返ってきた JSON を dict で返す。"""
+    """プロンプトと画像（または PDF）を Gemini に送り、返ってきた JSON を dict で返す。"""
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY が設定されていません。RenderのEnvironmentに設定してください。")
 
-    if not mime_type or not mime_type.startswith("image/"):
+    # 画像 or PDF のみ許可。判別できないものは画像として扱う。
+    if not mime_type or (mime_type != "application/pdf" and not mime_type.startswith("image/")):
         mime_type = "image/jpeg"
 
     payload = {
