@@ -33,6 +33,8 @@ BUSINESS_DAY_END_HOUR = 9    # 09:00
 SITE_ACCESS_CODE = os.environ.get("SITE_ACCESS_CODE", "Gift-0723")
 # 実質ほぼ無期限（秒）。ブラウザにより Max-Age の上限あり（例: Chrome は約400日で打ち切り）
 SITE_ACCESS_COOKIE_MAX_AGE = int(os.environ.get("SITE_ACCESS_COOKIE_MAX_AGE", str(60 * 60 * 24 * 365 * 20)))
+# 当欠自動判定の外部トリガー用トークン（未設定なら /cron/check-absent は無効）
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 
 def get_business_date(dt=None):
@@ -1016,15 +1018,10 @@ def admin_history():
     )
 
 
-@app.route("/admin/check-absent", methods=["POST"])
-@admin_required
-def check_absent():
-    """営業日終了後に当欠チェックを実行"""
-    db = get_db()
-    business_date = request.form.get("business_date", get_business_date())
-
+def _run_absent_check(db, business_date):
+    """シフト登録済みで打刻が1件もないキャストを当欠として記録し、件数を返す。
+    既に打刻や当欠がある場合は対象外（何度実行しても二重登録されない）。"""
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
-    count = 0
     affected = []
     for c in casts:
         shift = db.execute(
@@ -1044,15 +1041,39 @@ def check_absent():
                 (c["id"], business_date),
             )
             affected.append(c["id"])
-            count += 1
 
     db.commit()
 
     for uid in affected:
         _sync_sheets(db, uid, business_date)
 
+    return len(affected)
+
+
+@app.route("/admin/check-absent", methods=["POST"])
+@admin_required
+def check_absent():
+    """営業日終了後に当欠チェックを手動実行"""
+    db = get_db()
+    business_date = request.form.get("business_date", get_business_date())
+    count = _run_absent_check(db, business_date)
     flash(f"当欠チェック完了。{count}件の当欠を記録しました。", "success")
     return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/cron/check-absent", methods=["GET", "POST"])
+def cron_check_absent():
+    """外部スケジューラ（GitHub Actions 等）から毎日叩く当欠自動判定。
+    CRON_SECRET と一致するトークンが必要。対象は実行時点の営業日。"""
+    token = request.args.get("token", "") or request.headers.get("X-Cron-Token", "")
+    if not CRON_SECRET or token != CRON_SECRET:
+        return "forbidden", 403
+
+    db = get_db()
+    business_date = get_business_date()
+    count = _run_absent_check(db, business_date)
+    logger.info("cron当欠判定: %s に %d 件を記録", business_date, count)
+    return jsonify({"ok": True, "business_date": business_date, "absent_added": count}), 200
 
 
 # --------------- 勤怠の編集（管理者） ---------------

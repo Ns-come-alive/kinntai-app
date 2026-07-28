@@ -1,0 +1,23 @@
+name: Daily absence check
+
+# 毎日 08:00 JST（= 23:00 UTC）に当欠を自動判定する。
+# 事前に GitHub リポジトリの Secrets に CRON_SECRET を登録し、
+# Render 側の環境変数 CRON_SECRET にも同じ値を設定しておくこと。
+
+on:
+  schedule:
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+
+env:
+  CRON_URL: https://kinntai-app.onrender.com/cron/check-absent
+
+jobs:
+  check-absent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger absence check
+        run: |
+          curl -fsSL -X POST \
+            -H "X-Cron-Token: ${{ secrets.CRON_SECRET }}" \
+            "$CRON_URL" -w "\nHTTP %{http_code}\n"
