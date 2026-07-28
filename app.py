@@ -1055,6 +1055,188 @@ def check_absent():
     return redirect(url_for("admin_dashboard"))
 
 
+# --------------- 勤怠の編集（管理者） ---------------
+
+@app.route("/admin/edit")
+@admin_required
+def admin_edit():
+    """キャスト×営業日ごとの勤怠編集画面。"""
+    db = get_db()
+    casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
+
+    cast_id = request.args.get("cast_id", type=int)
+    if not cast_id and casts:
+        cast_id = casts[0]["id"]
+
+    date = request.args.get("date", "").strip()
+    try:
+        view_dt = datetime.strptime(date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        view_dt = datetime.strptime(get_business_date(), "%Y-%m-%d")
+    date = view_dt.strftime("%Y-%m-%d")
+    prev_date = (view_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    next_date = (view_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    cast = None
+    records = []
+    is_absent = False
+    pickup_on = False
+    shift = None
+    driver_available = False
+    if cast_id:
+        cast = db.execute(
+            "SELECT * FROM users WHERE id = ? AND is_admin = 0", (cast_id,)
+        ).fetchone()
+    if cast:
+        all_recs = db.execute(
+            "SELECT * FROM attendance WHERE user_id = ? AND business_date = ? ORDER BY id",
+            (cast_id, date),
+        ).fetchall()
+        for r in all_recs:
+            if r["punch_type"] == "absent":
+                is_absent = True
+            else:
+                records.append(r)
+        pickup_on = db.execute(
+            "SELECT 1 FROM pickups WHERE user_id = ? AND business_date = ? LIMIT 1",
+            (cast_id, date),
+        ).fetchone() is not None
+        shift = db.execute(
+            "SELECT * FROM shifts WHERE user_id = ? AND business_date = ?",
+            (cast_id, date),
+        ).fetchone()
+        driver_available = db.execute(
+            "SELECT 1 FROM driver_shifts WHERE business_date = ? LIMIT 1", (date,)
+        ).fetchone() is not None
+
+    return render_template(
+        "admin_edit.html",
+        casts=casts,
+        cast=cast,
+        cast_id=cast_id,
+        date=date,
+        prev_date=prev_date,
+        next_date=next_date,
+        records=records,
+        is_absent=is_absent,
+        pickup_on=pickup_on,
+        shift=shift,
+        driver_available=driver_available,
+        reasons=LATE_REASONS,
+    )
+
+
+@app.route("/admin/edit/save", methods=["POST"])
+@admin_required
+def admin_edit_save():
+    db = get_db()
+    cast_id = request.form.get("cast_id", type=int)
+    date = request.form.get("date", "").strip()
+
+    cast = db.execute(
+        "SELECT * FROM users WHERE id = ? AND is_admin = 0", (cast_id,)
+    ).fetchone() if cast_id else None
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        cast = None
+    if not cast:
+        flash("編集対象が正しくありません。", "error")
+        return redirect(url_for("admin_edit"))
+
+    make_absent = bool(request.form.get("make_absent"))
+
+    if make_absent:
+        # 当欠にする: その日の打刻をすべて置き換えて当欠1件だけにする。
+        db.execute(
+            "DELETE FROM attendance WHERE user_id = ? AND business_date = ?",
+            (cast_id, date),
+        )
+        db.execute(
+            "INSERT INTO attendance (user_id, business_date, clock_in, punch_type, status) VALUES (?, ?, '', 'absent', '当欠')",
+            (cast_id, date),
+        )
+    else:
+        # 当欠の解除（当欠チェックで付いた記録を消す）
+        db.execute(
+            "DELETE FROM attendance WHERE user_id = ? AND business_date = ? AND punch_type = 'absent'",
+            (cast_id, date),
+        )
+        count = request.form.get("row_count", 0, type=int)
+        for i in range(count):
+            rec_id = request.form.get(f"rec_id_{i}", type=int)
+            if request.form.get(f"delete_{i}"):
+                if rec_id:
+                    db.execute(
+                        "DELETE FROM attendance WHERE id = ? AND user_id = ?",
+                        (rec_id, cast_id),
+                    )
+                continue
+
+            cin = request.form.get(f"in_{i}", "").strip()
+            if not cin:
+                # 出勤時刻が空の行は無視（新規の空行など）
+                if rec_id:
+                    db.execute(
+                        "DELETE FROM attendance WHERE id = ? AND user_id = ?",
+                        (rec_id, cast_id),
+                    )
+                continue
+
+            cout = request.form.get(f"out_{i}", "").strip()
+            ptype = request.form.get(f"type_{i}", "normal")
+            if ptype not in ("normal", "douhan"):
+                ptype = "normal"
+            reason = request.form.get(f"reason_{i}", "").strip()
+
+            clock_in = cin + ":00"
+            clock_out = (cout + ":00") if cout else None
+
+            status = _determine_status(db, cast_id, date, clock_in, ptype)
+            is_late = (status == "遅刻")
+            if ptype == "douhan":
+                status = "同伴" if not is_late else "同伴・遅刻"
+            if not is_late:
+                reason = ""
+
+            if rec_id:
+                db.execute(
+                    """UPDATE attendance
+                       SET clock_in = ?, clock_out = ?, punch_type = ?, status = ?, late_reason = ?
+                       WHERE id = ? AND user_id = ?""",
+                    (clock_in, clock_out, ptype, status, reason, rec_id, cast_id),
+                )
+            else:
+                db.execute(
+                    """INSERT INTO attendance
+                       (user_id, business_date, clock_in, clock_out, punch_type, status, late_reason)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (cast_id, date, clock_in, clock_out, ptype, status, reason),
+                )
+
+    # 送迎の有無
+    pickup_on = bool(request.form.get("pickup_on"))
+    existing_pickup = db.execute(
+        "SELECT id FROM pickups WHERE user_id = ? AND business_date = ?",
+        (cast_id, date),
+    ).fetchone()
+    if pickup_on and not existing_pickup:
+        db.execute(
+            """INSERT INTO pickups (user_id, business_date, clock_time)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id, business_date) DO NOTHING""",
+            (cast_id, date, now_jst().strftime("%H:%M:%S")),
+        )
+    elif not pickup_on and existing_pickup:
+        db.execute("DELETE FROM pickups WHERE id = ?", (existing_pickup["id"],))
+
+    db.commit()
+    _sync_sheets(db, cast_id, date)
+
+    flash("勤怠を保存しました。", "success")
+    return redirect(url_for("admin_edit", cast_id=cast_id, date=date))
+
+
 @app.route("/admin/sheets/export", methods=["POST"])
 @admin_required
 def admin_sheets_export():

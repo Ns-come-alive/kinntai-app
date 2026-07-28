@@ -119,12 +119,13 @@
                                 <th>退勤</th>
                                 <th>ステータス</th>
                                 <th>遅刻理由</th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
                             {% if records|length == 0 %}
                             <tr>
-                                <td colspan="7" style="text-align: center; padding: 32px; color: var(--gray-400);">
+                                <td colspan="8" style="text-align: center; padding: 32px; color: var(--gray-400);">
                                     該当する勤怠記録はありません
                                 </td>
                             </tr>
@@ -154,6 +155,9 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ r.late_reason or '-' }}</td>
+                                <td style="text-align: right; white-space: nowrap;">
+                                    <a href="{{ url_for('admin_edit', cast_id=r.user_id, date=r.business_date) }}" class="btn btn-outline btn-sm">編集</a>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

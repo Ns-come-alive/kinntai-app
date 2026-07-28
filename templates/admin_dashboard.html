@@ -85,6 +85,9 @@
                         </div>
                         {% endfor %}
                     {% endif %}
+                    <div style="margin-top: 10px; text-align: right;">
+                        <a href="{{ url_for('admin_edit', cast_id=item.cast.id, date=business_date) }}" class="btn btn-outline btn-sm">編集</a>
+                    </div>
                 </div>
             </div>
             {% endfor %}

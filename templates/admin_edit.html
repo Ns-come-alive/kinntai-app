@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}勤怠の編集 - 勤怠管理{% endblock %}
+
+{% block body %}
+<div class="app-container">
+    <nav class="navbar">
+        <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
+            <span class="icon">&#128336;</span>
+            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+        </a>
+        <div class="navbar-right">
+            <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>
+            <a href="{{ url_for('admin_shifts') }}" class="navbar-link">シフト管理</a>
+            <a href="{{ url_for('admin_history') }}" class="navbar-link">出勤履歴</a>
+            <a href="{{ url_for('admin_casts') }}" class="navbar-link">キャスト管理</a>
+            <a href="{{ url_for('admin_drivers') }}" class="navbar-link">送迎ドライバー</a>
+            <a href="{{ url_for('logout') }}" class="navbar-link">ログアウト</a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="dashboard-header">
+            <div class="dashboard-date">勤怠の編集</div>
+            <div class="dashboard-greeting">キャストと営業日を選んで、出退勤時刻・欠勤・送迎を編集できます。</div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('admin_edit') }}" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">キャスト</label>
+                        <select name="cast_id" class="form-input" style="max-width: 160px;" onchange="this.form.submit()">
+                            {% for c in casts %}
+                            <option value="{{ c.id }}" {% if c.id == cast_id %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">営業日</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <a href="{{ url_for('admin_edit', cast_id=cast_id, date=prev_date) }}" class="btn btn-outline btn-sm" title="前日" style="font-weight: bold;">&#9664;</a>
+                            <input class="form-input" type="date" name="date" value="{{ date }}" style="max-width: 180px;" onchange="this.form.submit()">
+                            <a href="{{ url_for('admin_edit', cast_id=cast_id, date=next_date) }}" class="btn btn-outline btn-sm" title="翌日" style="font-weight: bold;">&#9654;</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if cast %}
+        <div class="card mt-24">
+            <div class="card-header">
+                <span class="card-title">{{ cast.name }} ／ {{ date }}</span>
+                <span class="shift-label {% if not shift %}none{% endif %}">
+                    {% if shift %}シフト {{ shift.shift_start }}～{% else %}シフト未登録{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_edit_save') }}">
+                    <input type="hidden" name="cast_id" value="{{ cast_id }}">
+                    <input type="hidden" name="date" value="{{ date }}">
+                    <input type="hidden" name="row_count" id="row_count" value="{{ records|length }}">
+
+                    <div id="rows-wrap" class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>種別</th>
+                                    <th>出勤</th>
+                                    <th>退勤</th>
+                                    <th>遅刻理由</th>
+                                    <th style="width: 60px;">削除</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rows-body">
+                                {% for r in records %}
+                                {% set i = loop.index0 %}
+                                <tr>
+                                    <td>
+                                        <select class="form-input" name="type_{{ i }}" style="max-width: 110px;">
+                                            <option value="normal" {% if r.punch_type != 'douhan' %}selected{% endif %}>通常</option>
+                                            <option value="douhan" {% if r.punch_type == 'douhan' %}selected{% endif %}>同伴</option>
+                                        </select>
+                                    </td>
+                                    <td><input class="form-input" type="time" name="in_{{ i }}" value="{{ (r.clock_in or '')[:5] }}" style="max-width: 130px;"></td>
+                                    <td><input class="form-input" type="time" name="out_{{ i }}" value="{{ (r.clock_out or '')[:5] }}" style="max-width: 130px;"></td>
+                                    <td>
+                                        <select class="form-input" name="reason_{{ i }}" style="max-width: 150px;">
+                                            <option value="">（なし）</option>
+                                            {% for rs in reasons %}
+                                            <option value="{{ rs }}" {% if r.late_reason == rs %}selected{% endif %}>{{ rs }}</option>
+                                            {% endfor %}
+                                            {% if r.late_reason and r.late_reason not in reasons %}
+                                            <option value="{{ r.late_reason }}" selected>{{ r.late_reason }}</option>
+                                            {% endif %}
+                                        </select>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <input type="hidden" name="rec_id_{{ i }}" value="{{ r.id }}">
+                                        <input type="checkbox" name="delete_{{ i }}" value="1">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-top: 12px;">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="addRow()">＋ 行を追加</button>
+                    </div>
+
+                    <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="pickup_on" value="1" {% if pickup_on %}checked{% endif %}>
+                            <span>送迎あり（この日）
+                                {% if not driver_available %}<span style="color: var(--gray-400); font-size: 0.8rem;">※ この日はドライバー未登録です</span>{% endif %}
+                            </span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="make_absent" id="make_absent" value="1" {% if is_absent %}checked{% endif %}>
+                            <span>欠勤（当欠）にする <span style="color: var(--gray-400); font-size: 0.8rem;">※ チェックすると上の打刻はすべて当欠に置き換わります</span></span>
+                        </label>
+                    </div>
+
+                    <div style="margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end;">
+                        <a href="{{ url_for('admin_history') }}" class="btn btn-outline">戻る</a>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="card mt-24">
+            <div class="card-body">
+                <p style="color: var(--gray-400); text-align: center; padding: 24px;">キャストを選択してください。</p>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var REASON_OPTS = '<option value="">（なし）</option>'
+{% for rs in reasons %}+ '<option value="{{ rs }}">{{ rs }}</option>'{% endfor %};
+
+function addRow() {
+    var body = document.getElementById('rows-body');
+    var countInput = document.getElementById('row_count');
+    var i = parseInt(countInput.value, 10);
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+        '<td><select class="form-input" name="type_' + i + '" style="max-width: 110px;">' +
+            '<option value="normal">通常</option><option value="douhan">同伴</option></select></td>' +
+        '<td><input class="form-input" type="time" name="in_' + i + '" style="max-width: 130px;"></td>' +
+        '<td><input class="form-input" type="time" name="out_' + i + '" style="max-width: 130px;"></td>' +
+        '<td><select class="form-input" name="reason_' + i + '" style="max-width: 150px;">' + REASON_OPTS + '</select></td>' +
+        '<td style="text-align: center;"><input type="hidden" name="rec_id_' + i + '" value="">' +
+            '<input type="checkbox" name="delete_' + i + '" value="1"></td>';
+    body.appendChild(tr);
+    countInput.value = i + 1;
+}
+
+// 当欠チェック時は打刻編集を無効化して意図を明確にする
+var absentBox = document.getElementById('make_absent');
+if (absentBox) {
+    function toggleRows() {
+        var disabled = absentBox.checked;
+        document.querySelectorAll('#rows-body input, #rows-body select').forEach(function(el) {
+            el.disabled = disabled;
+        });
+    }
+    absentBox.addEventListener('change', toggleRows);
+    toggleRows();
+}
+</script>
+{% endblock %}
