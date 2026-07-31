@@ -623,15 +623,21 @@ def admin_shifts():
 def admin_shifts_import():
     file = request.files.get("shift_image")
     if not file or not file.filename:
-        flash("画像を選択してください。", "error")
+        flash("画像またはPDFを選択してください。", "error")
         return redirect(url_for("admin_shifts"))
 
     if not gemini_configured():
-        flash("画像読み取りが未設定です（GEMINI_API_KEY）。管理者に連絡してください。", "error")
+        flash("読み取り機能が未設定です（GEMINI_API_KEY）。管理者に連絡してください。", "error")
         return redirect(url_for("admin_shifts"))
 
     image_bytes = file.read()
-    mime = file.mimetype or "image/jpeg"
+    # PDF はブラウザが MIME を送らないことがあるため拡張子でも判定する。
+    mime = (file.mimetype or "").lower()
+    fname = (file.filename or "").lower()
+    if fname.endswith(".pdf") or mime == "application/pdf":
+        mime = "application/pdf"
+    elif not mime.startswith("image/"):
+        mime = "image/jpeg"
 
     db = get_db()
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
@@ -642,7 +648,7 @@ def admin_shifts_import():
     try:
         shifts = parse_shift_image(image_bytes, mime, cast_names, year)
     except Exception as e:
-        flash(f"画像の読み取りに失敗しました: {e}", "error")
+        flash(f"読み取りに失敗しました: {e}", "error")
         return redirect(url_for("admin_shifts"))
 
     parsed_rows = []
@@ -659,7 +665,7 @@ def admin_shifts_import():
             })
 
     if not parsed_rows:
-        flash("シフトを読み取れませんでした。画像が鮮明か、キャスト名が登録名と一致しているか確認してください。", "warning")
+        flash("シフトを読み取れませんでした。画像・PDFが鮮明か、キャスト名が登録名と一致しているか確認してください。", "warning")
         return redirect(url_for("admin_shifts"))
 
     parsed_rows.sort(key=lambda r: (r["date"], r["user_id"]))

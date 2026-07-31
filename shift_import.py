@@ -76,7 +76,7 @@ def _discover_models(api_key):
 def _build_prompt(cast_names, year):
     names_str = "、".join(cast_names) if cast_names else "(登録なし)"
     return (
-        "この画像はキャストの勤務シフト表（表形式）です。読み取り方は次の通りです。\n"
+        "この画像またはPDFはキャストの勤務シフト表（表形式）です。読み取り方は次の通りです。\n"
         "【表の構造】\n"
         "- 表の一番上の行に日付の数字(1〜31)、その下の行に曜日が並びます。\n"
         "- 左端の列にキャスト名が縦に並びます。\n"
@@ -188,7 +188,7 @@ def _generate(prompt, image_bytes, mime_type):
 
 
 def parse_shift_image(image_bytes, mime_type, cast_names, year):
-    """画像からキャストのシフト情報を抽出して [{date, name, start}, ...] を返す。"""
+    """画像またはPDFからキャストのシフト情報を抽出して [{date, name, start}, ...] を返す。"""
     parsed = _generate(_build_prompt(cast_names, year), image_bytes, mime_type)
     return parsed.get("shifts", [])
 
