@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}出勤履歴 (管理者) - 勤怠管理{% endblock %}
+{% block title %}出勤履歴 (管理者) - {{ store_name or '勤怠管理' }}{% endblock %}
 
 {% block body %}
 <div class="app-container">
     <nav class="navbar">
         <a href="{{ url_for('admin_dashboard') }}" class="navbar-brand">
             <span class="icon">&#128336;</span>
-            勤怠管理 <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
+            {{ store_name or '勤怠管理' }} <span style="font-size: 0.75rem; color: var(--gray-400); margin-left: 4px;">管理者</span>
         </a>
         <div class="navbar-right">
             <a href="{{ url_for('admin_dashboard') }}" class="navbar-link">本日の状況</a>

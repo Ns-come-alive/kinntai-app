@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}遅刻理由の選択 - 勤怠管理{% endblock %}
+{% block title %}遅刻理由の選択 - {{ store_name or '勤怠管理' }}{% endblock %}
 
 {% block body %}
 <div class="app-container">
     <nav class="navbar">
         <a href="{{ url_for('dashboard') }}" class="navbar-brand">
             <span class="icon">&#128336;</span>
-            勤怠管理
+            {{ store_name or 'タイムカード' }}
         </a>
         <div class="navbar-right">
             <span class="navbar-user">{{ session.user_name }}</span>

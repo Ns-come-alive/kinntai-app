@@ -5,6 +5,12 @@ name: Daily absence check
 # Render 側の環境変数 CRON_SECRET にも同じ値を設定しておくこと。
 # ※ GitHub Actions のスケジュールは数分〜十数分遅延することがあるが、
 #   エンドポイント側は「前夜の営業日」を対象にするため遅延の影響を受けない。
+#
+# 複数店舗に対応するには、リポジトリの Variables に STORE_BASE_URLS を作り、
+# 店舗のURLをスペースまたは改行区切りで並べる。
+#   例: https://kinntai-app.onrender.com https://kinntai-app-b.onrender.com
+# 未設定なら店舗A（既存）だけを対象にする。
+# ※ 各店舗の Render 環境変数 CRON_SECRET には同じ値を設定しておくこと。
 
 on:
   schedule:
@@ -12,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  CRON_URL: https://kinntai-app.onrender.com/cron/check-absent
+  STORE_BASE_URLS: ${{ vars.STORE_BASE_URLS || 'https://kinntai-app.onrender.com' }}
 
 jobs:
   check-absent:
@@ -20,6 +26,12 @@ jobs:
     steps:
       - name: Trigger absence check
         run: |
-          curl -fsSL -X POST \
-            -H "X-Cron-Token: ${{ secrets.CRON_SECRET }}" \
-            "$CRON_URL" -w "\nHTTP %{http_code}\n"
+          failed=0
+          for base in $STORE_BASE_URLS; do
+            base="${base%/}"
+            echo "--- $base ---"
+            curl -fsSL -X POST \
+              -H "X-Cron-Token: ${{ secrets.CRON_SECRET }}" \
+              "$base/cron/check-absent" -w "\nHTTP %{http_code}\n" || failed=1
+          done
+          exit $failed

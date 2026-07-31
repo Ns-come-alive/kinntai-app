@@ -5,7 +5,7 @@
 
 reportlab 内蔵の日本語フォント（HeiseiKakuGo-W5）を使うため、
 外部フォントのインストールは不要。見出し・箇条書き・表・水平線・
-太字・インラインコードに対応。
+太字・インラインコード・コードブロック(```)に対応。
 """
 
 import re
@@ -24,6 +24,7 @@ from reportlab.platypus import (
     ListFlowable,
     ListItem,
     Paragraph,
+    Preformatted,
     SimpleDocTemplate,
     Spacer,
     Table,
@@ -42,6 +43,13 @@ try:
 except Exception:
     FONT = FONT_BOLD = "HeiseiKakuGo-W5"
     pdfmetrics.registerFont(UnicodeCIDFont(FONT))
+
+# コードブロック用の等幅フォント。図の桁揃えを保つため MS ゴシックを使う。
+FONT_MONO = "JP-Mono"
+try:
+    pdfmetrics.registerFont(TTFont(FONT_MONO, r"C:\Windows\Fonts\msgothic.ttc", subfontIndex=0))
+except Exception:
+    FONT_MONO = FONT
 
 BASE = getSampleStyleSheet()
 
@@ -64,6 +72,9 @@ S = {
     "cellh": style("cellh", fontSize=9, leading=13, textColor=colors.white),
     "quote": style("quote", fontSize=10, leading=16, leftIndent=10,
                    textColor=colors.HexColor("#555555")),
+    "code": ParagraphStyle("code", parent=BASE["Normal"], fontName=FONT_MONO,
+                           fontSize=8, leading=12,
+                           textColor=colors.HexColor("#22303f")),
 }
 
 
@@ -106,6 +117,23 @@ def build_table(rows):
     return t
 
 
+def build_code(code_lines, indent):
+    """``` で囲まれたブロックを、枠付き・等幅の1セル表として組む。"""
+    text = "\n".join(ln[indent:] if ln[:indent].strip() == "" else ln.lstrip()
+                     for ln in code_lines)
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    t = Table([[Preformatted(text, S["code"])]], colWidths=[A4[0] - 40 * mm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f4f6fa")),
+        ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#c2ccdb")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return t
+
+
 def parse(md):
     flow = []
     lines = md.split("\n")
@@ -125,6 +153,20 @@ def parse(md):
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
+
+        if stripped.startswith("```"):
+            flush_bullets()
+            indent = len(line) - len(line.lstrip())
+            i += 1
+            code_lines = []
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code_lines.append(lines[i])
+                i += 1
+            i += 1  # 閉じる ``` を読み飛ばす
+            if code_lines:
+                flow.append(build_code(code_lines, indent))
+                flow.append(Spacer(1, 8))
+            continue
 
         if stripped.startswith("|") and i + 1 < len(lines) and \
                 re.match(r"^\|?[\s:|-]+\|?$", lines[i + 1].strip()):

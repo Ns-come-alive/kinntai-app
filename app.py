@@ -30,6 +30,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
 
 BUSINESS_DAY_START_HOUR = 20  # 20:00
 BUSINESS_DAY_END_HOUR = 9    # 09:00
+# 店舗名（複数店舗で同じコードを使い回すときに画面表示を切り替える）。未設定なら店舗名を出さない。
+STORE_NAME = os.environ.get("STORE_NAME", "").strip()
 SITE_ACCESS_CODE = os.environ.get("SITE_ACCESS_CODE", "Gift-0723")
 # 実質ほぼ無期限（秒）。ブラウザにより Max-Age の上限あり（例: Chrome は約400日で打ち切り）
 SITE_ACCESS_COOKIE_MAX_AGE = int(os.environ.get("SITE_ACCESS_COOKIE_MAX_AGE", str(60 * 60 * 24 * 365 * 20)))
@@ -81,6 +83,16 @@ def admin_required(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated
+
+
+@app.context_processor
+def inject_store_name():
+    """全テンプレートで店舗名を使えるようにする。
+
+    テンプレート側では店舗名が未設定のときの表示を
+    {{ store_name or 'タイムカード' }} のように指定する。
+    """
+    return {"store_name": STORE_NAME}
 
 
 @app.before_request

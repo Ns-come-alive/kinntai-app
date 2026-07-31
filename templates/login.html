@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}ログイン - タイムカード{% endblock %}
+{% block title %}ログイン - {{ store_name or 'タイムカード' }}{% endblock %}
 
 {% block body %}
 <div class="auth-wrapper">
     <div class="auth-card" style="max-width: 560px;">
+        {% if store_name %}<div class="auth-store">{{ store_name }}</div>{% endif %}
         <h1 class="auth-title">タイムカード</h1>
         <div class="auth-datetime">
             <div class="auth-datetime-date" id="login-live-date">--</div>

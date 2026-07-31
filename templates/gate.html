@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}アクセス認証 - 勤怠管理{% endblock %}
+{% block title %}アクセス認証 - {{ store_name or '勤怠管理' }}{% endblock %}
 
 {% block body %}
 <div class="auth-wrapper">
     <div class="auth-card" style="max-width: 400px;">
         <div class="auth-logo">&#128272;</div>
+        {% if store_name %}<div class="auth-store">{{ store_name }}</div>{% endif %}
         <h1 class="auth-title">アクセス認証</h1>
         <p class="auth-subtitle">アクセスコードを入力してください</p>
 

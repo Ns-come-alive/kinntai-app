@@ -1,4 +1,10 @@
+# 1つのコードベースで複数店舗を運用する構成。
+# 店舗ごとに Render のサービスを分け、DB・アクセスコード・スプレッドシートも分ける。
+# 値を入れていない環境変数（sync: false）は Render のダッシュボードで店舗ごとに設定すること。
+# 詳しい手順は docs/2店舗目セットアップ手順.md を参照。
+
 services:
+  # ---- 店舗A（既存。設定はダッシュボード側の値をそのまま使う）----
   - type: web
     name: kintai-app
     runtime: python
@@ -9,3 +15,41 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+
+  # ---- 店舗B（2店舗目）----
+  - type: web
+    name: kintai-app-b
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      # 画面に表示する店舗名
+      - key: STORE_NAME
+        sync: false
+      # 店舗B専用の Supabase 接続文字列（※店舗Aとは必ず別のDBにすること）
+      - key: DATABASE_URL
+        sync: false
+      # サイト全体のアクセスコード（店舗ごとに別の値）
+      - key: SITE_ACCESS_CODE
+        sync: false
+      # 管理者ログインのパスワード（店舗ごとに別の値）
+      - key: ADMIN_PASSWORD
+        sync: false
+      # 初期登録するキャスト名（カンマ区切り）。空にすると管理画面から登録する運用になる
+      - key: INITIAL_CAST_MEMBERS
+        value: ""
+      # 店舗B用スプレッドシートの Apps Script ウェブアプリURL（/exec で終わる）
+      - key: SHEETS_WEBHOOK_URL
+        sync: false
+      - key: SHEETS_WEBHOOK_SECRET
+        sync: false
+      # 当欠自動判定の外部トリガー用トークン（GitHub Actions の CRON_SECRET と同じ値）
+      - key: CRON_SECRET
+        sync: false
+      # シフト表のAI読み取り用（店舗Aと同じキーを使い回して問題ない）
+      - key: GEMINI_API_KEY
+        sync: false

@@ -6,9 +6,25 @@ from flask import g
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-INITIAL_CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
+DEFAULT_INITIAL_CAST_MEMBERS = ["りん", "ももせ", "ゆい", "せり", "らむ", "こと", "はな"]
+
+
+def _initial_cast_members():
+    """初期登録するキャスト名。
+
+    環境変数 INITIAL_CAST_MEMBERS（カンマ区切り）で店舗ごとに差し替えられる。
+    空文字を設定すると誰も登録せず、管理者画面のキャスト管理から追加する運用になる。
+    未設定なら既存店舗と同じ既定の顔ぶれ。
+    """
+    raw = os.environ.get("INITIAL_CAST_MEMBERS")
+    if raw is None:
+        return DEFAULT_INITIAL_CAST_MEMBERS
+    return [name.strip() for name in raw.split(",") if name.strip()]
+
+
+INITIAL_CAST_MEMBERS = _initial_cast_members()
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "Gift-0723"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Gift-0723")
 
 _db_initialized = False
 
