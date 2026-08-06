@@ -30,8 +30,10 @@ app.secret_key = os.environ.get("SECRET_KEY", "kintai-app-dev-secret-key")
 
 BUSINESS_DAY_START_HOUR = 20  # 20:00
 BUSINESS_DAY_END_HOUR = 9    # 09:00
-# 店舗名（複数店舗で同じコードを使い回すときに画面表示を切り替える）。未設定なら店舗名を出さない。
+# 店舗名（複数店舗で同じコードを使い回すときに画面表示を切り替える）。
 STORE_NAME = os.environ.get("STORE_NAME", "").strip()
+# 本店の表示名。STORE_NAME 未設定なら既定で GIFT を使う。
+HOME_STORE_LABEL = STORE_NAME or "GIFT"
 SITE_ACCESS_CODE = os.environ.get("SITE_ACCESS_CODE", "Gift-0723")
 # 実質ほぼ無期限（秒）。ブラウザにより Max-Age の上限あり（例: Chrome は約400日で打ち切り）
 SITE_ACCESS_COOKIE_MAX_AGE = int(os.environ.get("SITE_ACCESS_COOKIE_MAX_AGE", str(60 * 60 * 24 * 365 * 20)))
@@ -89,16 +91,15 @@ def admin_required(f):
 def inject_store_name():
     """全テンプレートで店舗名を使えるようにする。
 
-    テンプレート側では店舗名が未設定のときの表示を
-    {{ store_name or 'タイムカード' }} のように指定する。
+    STORE_NAME 未設定なら既定の GIFT を表示する。
     """
-    return {"store_name": STORE_NAME}
+    return {"store_name": HOME_STORE_LABEL}
 
 
 def _is_home_store(store):
-    """本店（GIFT）所属かどうか。store が空 or STORE_NAME と一致なら本店扱い。"""
+    """本店（GIFT）所属かどうか。store が空、または本店名と一致なら本店扱い。"""
     s = (store or "").strip()
-    return (not s) or (s == STORE_NAME)
+    return (not s) or (s == STORE_NAME) or (s == HOME_STORE_LABEL)
 
 
 def _cast_display_name(name, store):
@@ -111,7 +112,7 @@ def _cast_display_name(name, store):
 def _group_casts_by_store(casts):
     """ログイン画面のタブ用に、キャストを店舗ごとに分ける。
     先頭が本店（GIFT）、以降はヘルプ店舗（BlueBell 等）を名前順で並べる。"""
-    home_label = STORE_NAME or "本店"
+    home_label = HOME_STORE_LABEL
     home = []
     helps = {}
     for c in casts:
@@ -1338,7 +1339,7 @@ def admin_sheets_export():
 def admin_casts():
     db = get_db()
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
-    home_label = STORE_NAME or "本店"
+    home_label = HOME_STORE_LABEL
     # 追加フォームの候補（既に登録済みのヘルプ店舗名）
     help_stores = sorted({
         c["store"].strip() for c in casts
@@ -1375,7 +1376,7 @@ def admin_cast_add():
         "SELECT id FROM users WHERE name = ? AND store = ?", (name, store)
     ).fetchone()
     if existing:
-        where = STORE_NAME or "本店" if not store else store
+        where = HOME_STORE_LABEL if not store else store
         flash(f"「{name}」は{where}に既に登録されています。", "error")
         return redirect(url_for("admin_casts"))
 
@@ -1384,7 +1385,7 @@ def admin_cast_add():
         (name, pickup_fee, store),
     )
     db.commit()
-    where = STORE_NAME or "本店" if not store else store
+    where = HOME_STORE_LABEL if not store else store
     flash(f"「{name}」を{where}に追加しました。", "success")
     return redirect(url_for("admin_casts"))
 

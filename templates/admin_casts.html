@@ -47,7 +47,7 @@
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label">店舗</label>
                         <input class="form-input" type="text" name="store" list="store-list"
-                               placeholder="{{ home_label }}（空欄で本店）" style="max-width: 160px;">
+                               placeholder="空欄で{{ home_label }}" style="max-width: 160px;">
                         <datalist id="store-list">
                             {% for s in help_stores %}<option value="{{ s }}"></option>{% endfor %}
                         </datalist>
