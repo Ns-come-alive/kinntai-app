@@ -1435,8 +1435,10 @@ def admin_cast_delete(cast_id):
         flash("キャストが見つかりません。", "error")
         return redirect(url_for("admin_casts"))
 
+    # users を参照している行を先に削除しないと外部キー制約違反になる。
     db.execute("DELETE FROM attendance WHERE user_id = ?", (cast_id,))
     db.execute("DELETE FROM shifts WHERE user_id = ?", (cast_id,))
+    db.execute("DELETE FROM pickups WHERE user_id = ?", (cast_id,))
     db.execute("DELETE FROM users WHERE id = ?", (cast_id,))
     db.commit()
     flash(f"「{cast['name']}」を削除しました。", "success")
