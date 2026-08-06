@@ -3,6 +3,7 @@ import csv
 import io
 import math
 import logging
+import threading
 from datetime import datetime, date, timedelta, timezone
 from functools import wraps
 
@@ -19,7 +20,7 @@ from flask import (
     session, flash, jsonify, make_response
 )
 
-from database import get_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
+from database import get_db, new_db, init_db, ADMIN_USERNAME, ADMIN_PASSWORD
 import sheets
 from shift_import import (
     parse_shift_image, parse_driver_shift_image, is_configured as gemini_configured
@@ -957,10 +958,21 @@ def _punch_type_label(punch_type):
 
 
 def _sync_sheets(db, user_id, business_date):
-    """全員分の月間集計タブ（集計＋打刻履歴）を最新化して送信する。"""
+    """スプレッドシート同期。打刻をブロックしないよう、集計の組み立てと送信を
+    まるごと別スレッドに逃がす（引数 db / user_id は互換のため残すが未使用）。"""
     if not sheets.is_configured():
         return
+    threading.Thread(
+        target=_build_and_push_sheets, args=(business_date,), daemon=True
+    ).start()
+
+
+def _build_and_push_sheets(business_date):
+    """全員分の月間集計タブ（集計＋打刻履歴）を組み立てて送信する。
+    バックグラウンドスレッドで動くため、リクエストとは別のDB接続を開く。"""
+    db = None
     try:
+        db = new_db()
         start_date, end_date = _month_range(business_date)
         label = _month_label(business_date)
 
@@ -1016,6 +1028,9 @@ def _sync_sheets(db, user_id, business_date):
         sheets.push(payload)
     except Exception:
         logger.exception("スプレッドシート同期の準備に失敗しました")
+    finally:
+        if db is not None:
+            db.close()
 
 
 @app.route("/admin/history")
@@ -1097,8 +1112,9 @@ def _run_absent_check(db, business_date):
 
     db.commit()
 
-    for uid in affected:
-        _sync_sheets(db, uid, business_date)
+    # _sync_sheets は全キャストをまとめて再集計するので、1回だけ呼べば十分。
+    if affected:
+        _sync_sheets(db, affected[0], business_date)
 
     return len(affected)
 
@@ -1321,14 +1337,12 @@ def admin_sheets_export():
         flash("スプレッドシート連携が未設定です。", "error")
         return redirect(url_for("admin_history"))
 
-    db = get_db()
     year = request.form.get("year", now_jst().year, type=int)
     month = request.form.get("month", now_jst().month, type=int)
     any_date = f"{year:04d}-{month:02d}-15"
 
-    casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
-    for c in casts:
-        _sync_sheets(db, c["id"], any_date)
+    # 全キャストまとめて1回で書き出す（内部で全員分を再集計する）。
+    _sync_sheets(None, None, any_date)
 
     flash(f"{year}年{month:02d}月のデータをスプレッドシートへ書き出しました（反映まで少し時間がかかることがあります）。", "success")
     return redirect(url_for("admin_history", year=year, month=month))

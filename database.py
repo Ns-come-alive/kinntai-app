@@ -58,6 +58,13 @@ def get_db():
     return g.db
 
 
+def new_db():
+    """リクエストコンテキスト外（バックグラウンドスレッド等）で使う独立したDB接続。
+    使い終わったら必ず close() すること。"""
+    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+    return _DbWrapper(conn)
+
+
 def close_db(e=None):
     db = g.pop("db", None)
     if db is not None:
