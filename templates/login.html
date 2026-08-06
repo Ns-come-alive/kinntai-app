@@ -22,16 +22,31 @@
         {% endif %}
         {% endwith %}
 
-        <div class="cast-grid">
-            {% for cast in casts %}
-            <form method="POST" action="{{ url_for('login_cast', user_id=cast.id) }}">
-                <button type="submit" class="cast-tab">
-                    <span class="cast-icon">&#128100;</span>
-                    <span class="cast-name">{{ cast.name }}</span>
-                </button>
-            </form>
+        {% if store_groups|length > 1 %}
+        <div class="store-tabs">
+            {% for g in store_groups %}
+            <button type="button" class="store-tab {% if loop.first %}active{% endif %}"
+                    data-store-target="store-panel-{{ loop.index0 }}">{{ g.label }}</button>
             {% endfor %}
         </div>
+        {% endif %}
+
+        {% for g in store_groups %}
+        <div class="store-panel {% if loop.first %}active{% endif %}" id="store-panel-{{ loop.index0 }}">
+            <div class="cast-grid">
+                {% for cast in g.casts %}
+                <form method="POST" action="{{ url_for('login_cast', user_id=cast.id) }}">
+                    <button type="submit" class="cast-tab">
+                        <span class="cast-icon">&#128100;</span>
+                        <span class="cast-name">{{ cast.name }}</span>
+                    </button>
+                </form>
+                {% else %}
+                <p class="store-empty">このタブに登録されたキャストはいません</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
 
         <div class="admin-login-section">
             <details class="admin-toggle">
@@ -66,6 +81,22 @@
     }
     tick();
     setInterval(tick, 1000);
+})();
+
+// 店舗タブの切り替え
+(function() {
+    var tabs = document.querySelectorAll('.store-tab');
+    var panels = document.querySelectorAll('.store-panel');
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var target = tab.getAttribute('data-store-target');
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            panels.forEach(function(p) { p.classList.remove('active'); });
+            tab.classList.add('active');
+            var panel = document.getElementById(target);
+            if (panel) { panel.classList.add('active'); }
+        });
+    });
 })();
 </script>
 {% endblock %}

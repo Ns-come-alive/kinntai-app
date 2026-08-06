@@ -128,6 +128,12 @@ def init_db():
     # 既存DB向け: キャストの送迎料金（500 or 1000、既定1000）。
     db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS pickup_fee INTEGER DEFAULT 1000")
 
+    # 既存DB向け: キャストの所属店舗（ヘルプ勤務の別店舗タブ用）。空欄=本店(GIFT)。
+    db.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS store TEXT DEFAULT ''")
+    # 店舗が違えば同名キャストを許可するため、name 単独の UNIQUE を (name, store) に置き換える。
+    db.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_name_key")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_name_store_key ON users (name, store)")
+
     db.commit()
 
     user_count = db.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]

@@ -95,6 +95,36 @@ def inject_store_name():
     return {"store_name": STORE_NAME}
 
 
+def _is_home_store(store):
+    """本店（GIFT）所属かどうか。store が空 or STORE_NAME と一致なら本店扱い。"""
+    s = (store or "").strip()
+    return (not s) or (s == STORE_NAME)
+
+
+def _cast_display_name(name, store):
+    """スプレッドシート等での表示名。ヘルプ店舗のキャストは『名前（店舗）』にする。"""
+    if _is_home_store(store):
+        return name
+    return f"{name}（{(store or '').strip()}）"
+
+
+def _group_casts_by_store(casts):
+    """ログイン画面のタブ用に、キャストを店舗ごとに分ける。
+    先頭が本店（GIFT）、以降はヘルプ店舗（BlueBell 等）を名前順で並べる。"""
+    home_label = STORE_NAME or "本店"
+    home = []
+    helps = {}
+    for c in casts:
+        if _is_home_store(c["store"]):
+            home.append(c)
+        else:
+            helps.setdefault(c["store"].strip(), []).append(c)
+    groups = [{"store": "", "label": home_label, "casts": home}]
+    for store_name in sorted(helps):
+        groups.append({"store": store_name, "label": store_name, "casts": helps[store_name]})
+    return groups
+
+
 @app.before_request
 def before_request():
     if request.path == "/healthz":
@@ -144,7 +174,8 @@ def login():
     casts = db.execute(
         "SELECT * FROM users WHERE is_admin = 0 ORDER BY id"
     ).fetchall()
-    return render_template("login.html", casts=casts)
+    store_groups = _group_casts_by_store(casts)
+    return render_template("login.html", store_groups=store_groups)
 
 
 @app.route("/login/cast/<int:user_id>", methods=["POST"])
@@ -939,9 +970,10 @@ def _sync_sheets(db, user_id, business_date):
         ]]
         history_rows = []
         for c in casts:
+            display_name = _cast_display_name(c["name"], c["store"])
             s = _calc_cast_summary(db, c["id"], start_date, end_date)
             summary_rows.append([
-                c["name"], s["total_days"], s["total_work_hours"],
+                display_name, s["total_days"], s["total_work_hours"],
                 s["total_late_hours"], s["absent_days"],
                 s["pickup_count"], s["pickup_amount"],
             ])
@@ -956,7 +988,7 @@ def _sync_sheets(db, user_id, business_date):
                 wh = _calc_work_hours(r["clock_in"], r["clock_out"])
                 history_rows.append([
                     r["business_date"],
-                    c["name"],
+                    display_name,
                     r["clock_in"] or "",
                     r["clock_out"] or "",
                     wh if wh is not None else "",
@@ -1306,7 +1338,19 @@ def admin_sheets_export():
 def admin_casts():
     db = get_db()
     casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
-    return render_template("admin_casts.html", casts=casts)
+    home_label = STORE_NAME or "本店"
+    # 追加フォームの候補（既に登録済みのヘルプ店舗名）
+    help_stores = sorted({
+        c["store"].strip() for c in casts
+        if not _is_home_store(c["store"])
+    })
+    return render_template(
+        "admin_casts.html",
+        casts=casts,
+        home_label=home_label,
+        help_stores=help_stores,
+        is_home_store=_is_home_store,
+    )
 
 
 @app.route("/admin/casts/add", methods=["POST"])
@@ -1317,22 +1361,31 @@ def admin_cast_add():
         flash("名前を入力してください。", "error")
         return redirect(url_for("admin_casts"))
 
+    store = request.form.get("store", "").strip()
+    # 本店を指す入力（空・店舗名一致）は空欄に正規化する。
+    if _is_home_store(store):
+        store = ""
+
     pickup_fee = request.form.get("pickup_fee", 1000, type=int)
     if pickup_fee not in (500, 1000):
         pickup_fee = 1000
 
     db = get_db()
-    existing = db.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
+    existing = db.execute(
+        "SELECT id FROM users WHERE name = ? AND store = ?", (name, store)
+    ).fetchone()
     if existing:
-        flash(f"「{name}」は既に登録されています。", "error")
+        where = STORE_NAME or "本店" if not store else store
+        flash(f"「{name}」は{where}に既に登録されています。", "error")
         return redirect(url_for("admin_casts"))
 
     db.execute(
-        "INSERT INTO users (name, is_admin, pickup_fee) VALUES (?, 0, ?)",
-        (name, pickup_fee),
+        "INSERT INTO users (name, is_admin, pickup_fee, store) VALUES (?, 0, ?, ?)",
+        (name, pickup_fee, store),
     )
     db.commit()
-    flash(f"「{name}」を追加しました。", "success")
+    where = STORE_NAME or "本店" if not store else store
+    flash(f"「{name}」を{where}に追加しました。", "success")
     return redirect(url_for("admin_casts"))
 
 

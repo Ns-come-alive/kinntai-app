@@ -45,6 +45,14 @@
                         <input class="form-input" type="text" name="name" placeholder="キャスト名を入力" required>
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">店舗</label>
+                        <input class="form-input" type="text" name="store" list="store-list"
+                               placeholder="{{ home_label }}（空欄で本店）" style="max-width: 160px;">
+                        <datalist id="store-list">
+                            {% for s in help_stores %}<option value="{{ s }}"></option>{% endfor %}
+                        </datalist>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label">送迎料金</label>
                         <select class="form-input" name="pickup_fee" style="max-width: 120px;">
                             <option value="1000" selected>1,000円</option>
@@ -53,6 +61,10 @@
                     </div>
                     <button type="submit" class="btn btn-success">追加</button>
                 </form>
+                <p style="margin: 12px 0 0; font-size: .8125rem; color: var(--gray-400);">
+                    ヘルプの別店舗キャストは「店舗」に店舗名（例: BlueBell）を入れて追加すると、
+                    ログイン画面にその店舗のタブが表示されます。空欄なら{{ home_label }}のキャストになります。
+                </p>
             </div>
         </div>
 
@@ -67,6 +79,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>名前</th>
+                                <th>店舗</th>
                                 <th>送迎料金</th>
                                 <th>登録日</th>
                                 <th></th>
@@ -75,7 +88,7 @@
                         <tbody>
                             {% if casts|length == 0 %}
                             <tr>
-                                <td colspan="5" style="text-align: center; padding: 32px; color: var(--gray-400);">
+                                <td colspan="6" style="text-align: center; padding: 32px; color: var(--gray-400);">
                                     キャストが登録されていません
                                 </td>
                             </tr>
@@ -85,6 +98,13 @@
                             <tr>
                                 <td>{{ c.id }}</td>
                                 <td style="font-weight: 600;">{{ c.name }}</td>
+                                <td>
+                                    {% if is_home_store(c.store) %}
+                                        <span style="color: var(--gray-400);">{{ home_label }}</span>
+                                    {% else %}
+                                        <span class="punch-badge douhan">{{ c.store }}</span>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <form method="POST" action="{{ url_for('admin_cast_fee', cast_id=c.id) }}" style="display: flex; gap: 6px; align-items: center;">
                                         <select class="form-input" name="pickup_fee" style="max-width: 110px; padding: 4px 8px;">

@@ -96,6 +96,22 @@ body {
     font-variant-numeric: tabular-nums; letter-spacing: 3px; line-height: 1.2;
 }
 
+/* Store Tabs on Login */
+.store-tabs {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 8px; margin-bottom: 24px;
+}
+.store-tab {
+    padding: 8px 24px; border: 2px solid var(--gray-200); background: var(--gray-50);
+    border-radius: 999px; cursor: pointer; font-family: inherit;
+    font-size: .9375rem; font-weight: 700; color: var(--gray-500); transition: all .2s;
+}
+.store-tab:hover { color: var(--primary); border-color: var(--primary); }
+.store-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.store-panel { display: none; }
+.store-panel.active { display: block; }
+.store-empty { text-align: center; color: var(--gray-400); font-size: .875rem; padding: 24px 0; }
+
 /* Cast Grid on Login */
 .cast-grid {
     display: flex;
