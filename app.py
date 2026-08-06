@@ -1060,12 +1060,14 @@ def admin_history():
     return render_template(
         "admin_history.html",
         casts=casts,
+        store_groups=_group_casts_by_store(casts),
         records=records,
         year=year,
         month=month,
         cast_id=cast_id,
         cast_summaries=cast_summaries,
         sheets_enabled=sheets.is_configured(),
+        is_home_store=_is_home_store,
     )
 
 

@@ -31,7 +31,7 @@
                         <select name="cast_id" class="form-input" style="max-width: 160px;">
                             <option value="0" {% if cast_id == 0 %}selected{% endif %}>全員</option>
                             {% for c in casts %}
-                            <option value="{{ c.id }}" {% if cast_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                            <option value="{{ c.id }}" {% if cast_id == c.id %}selected{% endif %}>{{ c.name }}{% if not is_home_store(c.store) %}（{{ c.store }}）{% endif %}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -62,42 +62,59 @@
                 <span class="card-title">{{ year }}年{{ month }}月 キャスト別サマリー</span>
             </div>
             <div class="card-body" style="padding: 0;">
-                <div class="cast-tabs">
-                    {% for c in casts %}
-                    <button class="cast-summary-tab {% if loop.first %}active{% endif %}" onclick="showCastSummary(this, 'cast-summary-{{ c.id }}')">
-                        {{ c.name }}
-                    </button>
+                {% if store_groups|length > 1 %}
+                <div class="store-tabs" style="justify-content: flex-start; padding: 16px 16px 0; margin-bottom: 0;">
+                    {% for g in store_groups %}
+                    <button type="button" class="store-tab {% if loop.first %}active{% endif %}"
+                            onclick="showStoreSummary(this, 'store-summary-{{ loop.index0 }}')">{{ g.label }}</button>
                     {% endfor %}
                 </div>
-                {% for c in casts %}
-                {% set s = cast_summaries[c.id] %}
-                <div class="cast-summary-panel {% if loop.first %}active{% endif %}" id="cast-summary-{{ c.id }}">
-                    <div class="summary-grid" style="margin-bottom: 0;">
-                        <div class="summary-card">
-                            <div class="label">出勤日数</div>
-                            <div class="value">{{ s.total_days }}<span class="unit">日</span></div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="label">総勤務時間</div>
-                            <div class="value">{{ s.total_work_hours }}<span class="unit">時間</span></div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="label">遅刻時間</div>
-                            <div class="value {% if s.total_late_hours > 0 %}summary-warn{% endif %}">{{ s.total_late_hours }}<span class="unit">時間</span></div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="label">欠勤日数</div>
-                            <div class="value {% if s.absent_days > 0 %}summary-danger{% endif %}">{{ s.absent_days }}<span class="unit">日</span></div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="label">送迎回数</div>
-                            <div class="value">{{ s.pickup_count }}<span class="unit">回</span></div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="label">送迎料金</div>
-                            <div class="value">{{ "{:,}".format(s.pickup_amount) }}<span class="unit">円</span></div>
+                {% endif %}
+
+                {% for g in store_groups %}
+                <div class="store-summary-group {% if loop.first %}active{% endif %}" id="store-summary-{{ loop.index0 }}">
+                    {% if g.casts|length == 0 %}
+                    <p class="store-empty" style="padding: 24px 0;">このタブに登録されたキャストはいません</p>
+                    {% else %}
+                    <div class="cast-tabs">
+                        {% for c in g.casts %}
+                        <button type="button" class="cast-summary-tab {% if loop.first %}active{% endif %}" onclick="showCastSummary(this, 'cast-summary-{{ c.id }}')">
+                            {{ c.name }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% for c in g.casts %}
+                    {% set s = cast_summaries[c.id] %}
+                    <div class="cast-summary-panel {% if loop.first %}active{% endif %}" id="cast-summary-{{ c.id }}">
+                        <div class="summary-grid" style="margin-bottom: 0;">
+                            <div class="summary-card">
+                                <div class="label">出勤日数</div>
+                                <div class="value">{{ s.total_days }}<span class="unit">日</span></div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="label">総勤務時間</div>
+                                <div class="value">{{ s.total_work_hours }}<span class="unit">時間</span></div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="label">遅刻時間</div>
+                                <div class="value {% if s.total_late_hours > 0 %}summary-warn{% endif %}">{{ s.total_late_hours }}<span class="unit">時間</span></div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="label">欠勤日数</div>
+                                <div class="value {% if s.absent_days > 0 %}summary-danger{% endif %}">{{ s.absent_days }}<span class="unit">日</span></div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="label">送迎回数</div>
+                                <div class="value">{{ s.pickup_count }}<span class="unit">回</span></div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="label">送迎料金</div>
+                                <div class="value">{{ "{:,}".format(s.pickup_amount) }}<span class="unit">円</span></div>
+                            </div>
                         </div>
                     </div>
+                    {% endfor %}
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -172,10 +189,20 @@
 {% block scripts %}
 <script>
 function showCastSummary(tab, panelId) {
-    document.querySelectorAll('.cast-summary-tab').forEach(function(t) { t.classList.remove('active'); });
-    document.querySelectorAll('.cast-summary-panel').forEach(function(p) { p.classList.remove('active'); });
+    // 同じ店舗グループ内だけで切り替える
+    var group = tab.closest('.store-summary-group') || document;
+    group.querySelectorAll('.cast-summary-tab').forEach(function(t) { t.classList.remove('active'); });
+    group.querySelectorAll('.cast-summary-panel').forEach(function(p) { p.classList.remove('active'); });
     tab.classList.add('active');
     document.getElementById(panelId).classList.add('active');
+}
+
+function showStoreSummary(tab, groupId) {
+    var container = tab.closest('.card-body');
+    container.querySelectorAll('.store-tab').forEach(function(t) { t.classList.remove('active'); });
+    container.querySelectorAll('.store-summary-group').forEach(function(g) { g.classList.remove('active'); });
+    tab.classList.add('active');
+    document.getElementById(groupId).classList.add('active');
 }
 </script>
 {% endblock %}

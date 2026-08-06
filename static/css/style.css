@@ -110,6 +110,8 @@ body {
 .store-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .store-panel { display: none; }
 .store-panel.active { display: block; }
+.store-summary-group { display: none; }
+.store-summary-group.active { display: block; }
 .store-empty { text-align: center; color: var(--gray-400); font-size: .875rem; padding: 24px 0; }
 
 /* Cast Grid on Login */
