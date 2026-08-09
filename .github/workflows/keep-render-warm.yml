@@ -5,11 +5,14 @@ name: Keep Render warm
 
 on:
   schedule:
-    - cron: "*/14 * * * *"
+    # GitHub のスケジュールは混雑時に数分遅れることがあるため、
+    # 15分の休止に確実に間に合うよう 10分間隔にしている。
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 env:
-  STORE_BASE_URLS: ${{ vars.STORE_BASE_URLS || 'https://kinntai-app.onrender.com' }}
+  # 変数を設定し忘れても両店舗（GIFT / BlueBell）が温まるよう、既定に両方を入れている。
+  STORE_BASE_URLS: ${{ vars.STORE_BASE_URLS || 'https://kinntai-app.onrender.com https://kintai-app-bluebell.onrender.com' }}
 
 jobs:
   ping:
