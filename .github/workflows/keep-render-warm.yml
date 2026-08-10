@@ -1,7 +1,12 @@
 name: Keep Render warm
 
-# 対象店舗は Variables の STORE_BASE_URLS で指定する（スペース/改行区切り）。
-# 未設定なら店舗A（既存）だけを対象にする。
+# 既定で必ず両店舗（GIFT / BlueBell）を温める。
+# 3店舗目以降を足したいときだけ、Variables の EXTRA_STORE_BASE_URLS に
+# 追加URLをスペース/改行区切りで並べる（既定の2店舗は常に対象のまま）。
+#
+# ※ 以前は STORE_BASE_URLS で「対象を丸ごと差し替える」方式だったが、
+#   変数を設定すると既定が無視され、片方の店舗が休止してしまう事故があったため、
+#   既定は常に温める方式に変更した。
 
 on:
   schedule:
@@ -11,8 +16,10 @@ on:
   workflow_dispatch:
 
 env:
-  # 変数を設定し忘れても両店舗（GIFT / BlueBell）が温まるよう、既定に両方を入れている。
-  STORE_BASE_URLS: ${{ vars.STORE_BASE_URLS || 'https://kinntai-app.onrender.com https://kintai-app-bluebell.onrender.com' }}
+  # 常に温める店舗（変数の設定に関わらず必ず対象）
+  DEFAULT_STORE_BASE_URLS: "https://kinntai-app.onrender.com https://kintai-app-bluebell.onrender.com"
+  # 追加店舗があればここに足す（未設定なら何も足さない）
+  EXTRA_STORE_BASE_URLS: ${{ vars.EXTRA_STORE_BASE_URLS }}
 
 jobs:
   ping:
@@ -20,8 +27,14 @@ jobs:
     steps:
       - name: Ping health check
         run: |
-          for base in $STORE_BASE_URLS; do
+          failed=0
+          seen=""
+          for base in $DEFAULT_STORE_BASE_URLS $EXTRA_STORE_BASE_URLS; do
             base="${base%/}"
+            # 重複URLは1回だけpingする
+            case " $seen " in *" $base "*) continue;; esac
+            seen="$seen $base"
             echo -n "$base -> "
-            curl -fsSL -o /dev/null -w "HTTP %{http_code}\n" "$base/healthz" || echo "failed"
+            curl -fsSL -o /dev/null -w "HTTP %{http_code}\n" "$base/healthz" || { echo "failed"; failed=1; }
           done
+          exit $failed
