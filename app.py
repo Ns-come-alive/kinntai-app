@@ -369,6 +369,10 @@ def _calc_work_hours(clock_in, clock_out):
 
 LATE_REASONS = ["交通機関の遅延", "体調不良", "その他"]
 
+# 欠勤の種別（管理者の勤怠編集で選べる）。いずれも punch_type='absent' で、
+# 区別は status に保存する。当欠自動判定で付くのは常に「当欠」。
+ABSENCE_TYPES = ["当欠", "病欠"]
+
 
 @app.route("/clock-in", methods=["POST"])
 @login_required
@@ -551,6 +555,7 @@ def history():
         total_work_hours=summary["total_work_hours"],
         total_late_hours=summary["total_late_hours"],
         absent_days=summary["absent_days"],
+        sick_days=summary["sick_days"],
         pickup_count=summary["pickup_count"],
         pickup_amount=summary["pickup_amount"],
     )
@@ -887,13 +892,17 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
     ).fetchall()
 
     working_dates = set()
-    absent_dates = set()
+    absent_dates = set()      # 当欠（自動判定・当欠指定）
+    sick_dates = set()        # 病欠
     total_late_hours = 0.0
     total_work_hours = 0.0
 
     for r in records:
         if r["punch_type"] == "absent":
-            absent_dates.add(r["business_date"])
+            if (r["status"] or "") == "病欠":
+                sick_dates.add(r["business_date"])
+            else:
+                absent_dates.add(r["business_date"])
             continue
 
         working_dates.add(r["business_date"])
@@ -924,6 +933,7 @@ def _calc_cast_summary(db, user_id, start_date, end_date):
         "total_work_hours": round(total_work_hours, 2),
         "total_late_hours": total_late_hours,
         "absent_days": len(absent_dates),
+        "sick_days": len(sick_dates),
         "pickup_count": pickup_count,
         "pickup_fee": pickup_fee,
         "pickup_amount": pickup_count * pickup_fee,
@@ -949,11 +959,12 @@ def _month_range(business_date):
     return start, end
 
 
-def _punch_type_label(punch_type):
+def _punch_type_label(punch_type, status=""):
     if punch_type == "douhan":
         return "同伴"
     if punch_type == "absent":
-        return "当欠"
+        # 欠勤の種別（当欠/病欠）は status に入っているのでそれを優先。
+        return status or "当欠"
     return "通常"
 
 
@@ -978,7 +989,7 @@ def _build_and_push_sheets(business_date):
 
         casts = db.execute("SELECT * FROM users WHERE is_admin = 0 ORDER BY id").fetchall()
         summary_rows = [[
-            "キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "欠勤日数",
+            "キャスト", "出勤日数", "総稼働時間(h)", "遅刻時間(h)", "当欠日数", "病欠日数",
             "送迎回数", "送迎料金(円)",
         ]]
         history_rows = []
@@ -987,7 +998,7 @@ def _build_and_push_sheets(business_date):
             s = _calc_cast_summary(db, c["id"], start_date, end_date)
             summary_rows.append([
                 display_name, s["total_days"], s["total_work_hours"],
-                s["total_late_hours"], s["absent_days"],
+                s["total_late_hours"], s["absent_days"], s["sick_days"],
                 s["pickup_count"], s["pickup_amount"],
             ])
 
@@ -1005,7 +1016,7 @@ def _build_and_push_sheets(business_date):
                     r["clock_in"] or "",
                     r["clock_out"] or "",
                     wh if wh is not None else "",
-                    _punch_type_label(r["punch_type"]),
+                    _punch_type_label(r["punch_type"], r["status"]),
                     r["status"] or "",
                     r["late_reason"] or "",
                 ])
@@ -1173,6 +1184,7 @@ def admin_edit():
     cast = None
     records = []
     is_absent = False
+    absent_status = ""  # 当欠 / 病欠 / ""（欠勤なし）
     pickup_on = False
     shift = None
     driver_available = False
@@ -1188,6 +1200,7 @@ def admin_edit():
         for r in all_recs:
             if r["punch_type"] == "absent":
                 is_absent = True
+                absent_status = r["status"] or "当欠"
             else:
                 records.append(r)
         pickup_on = db.execute(
@@ -1212,6 +1225,8 @@ def admin_edit():
         next_date=next_date,
         records=records,
         is_absent=is_absent,
+        absent_status=absent_status,
+        absence_types=ABSENCE_TYPES,
         pickup_on=pickup_on,
         shift=shift,
         driver_available=driver_available,
@@ -1237,20 +1252,23 @@ def admin_edit_save():
         flash("編集対象が正しくありません。", "error")
         return redirect(url_for("admin_edit"))
 
-    make_absent = bool(request.form.get("make_absent"))
+    # 欠勤の種別（当欠 / 病欠）。想定外の値は欠勤なし扱いにする。
+    absence_type = request.form.get("absence_type", "").strip()
+    if absence_type not in ABSENCE_TYPES:
+        absence_type = ""
 
-    if make_absent:
-        # 当欠にする: その日の打刻をすべて置き換えて当欠1件だけにする。
+    if absence_type:
+        # 欠勤にする: その日の打刻をすべて置き換えて欠勤1件だけにする。
         db.execute(
             "DELETE FROM attendance WHERE user_id = ? AND business_date = ?",
             (cast_id, date),
         )
         db.execute(
-            "INSERT INTO attendance (user_id, business_date, clock_in, punch_type, status) VALUES (?, ?, '', 'absent', '当欠')",
-            (cast_id, date),
+            "INSERT INTO attendance (user_id, business_date, clock_in, punch_type, status) VALUES (?, ?, '', 'absent', ?)",
+            (cast_id, date, absence_type),
         )
     else:
-        # 当欠の解除（当欠チェックで付いた記録を消す）
+        # 欠勤の解除（当欠チェック等で付いた記録を消す）
         db.execute(
             "DELETE FROM attendance WHERE user_id = ? AND business_date = ? AND punch_type = 'absent'",
             (cast_id, date),
@@ -1482,7 +1500,7 @@ def admin_export():
     writer.writerow(["キャスト", "営業日", "出勤時刻", "退勤時刻", "種別", "ステータス", "遅刻理由"])
 
     for r in records:
-        punch = "同伴" if r["punch_type"] == "douhan" else ("当欠" if r["punch_type"] == "absent" else "通常")
+        punch = _punch_type_label(r["punch_type"], r["status"])
         writer.writerow([
             r["cast_name"],
             r["business_date"],

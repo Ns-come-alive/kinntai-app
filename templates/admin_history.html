@@ -100,8 +100,12 @@
                                 <div class="value {% if s.total_late_hours > 0 %}summary-warn{% endif %}">{{ s.total_late_hours }}<span class="unit">時間</span></div>
                             </div>
                             <div class="summary-card">
-                                <div class="label">欠勤日数</div>
+                                <div class="label">当欠日数</div>
                                 <div class="value {% if s.absent_days > 0 %}summary-danger{% endif %}">{{ s.absent_days }}<span class="unit">日</span></div>
+                            </div>
+                            <div class="summary-card">
+                                <div class="label">病欠日数</div>
+                                <div class="value {% if s.sick_days > 0 %}summary-warn{% endif %}">{{ s.sick_days }}<span class="unit">日</span></div>
                             </div>
                             <div class="summary-card">
                                 <div class="label">送迎回数</div>

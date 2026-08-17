@@ -126,9 +126,15 @@
                                 {% if not driver_available %}<span style="color: var(--gray-400); font-size: 0.8rem;">※ この日はドライバー未登録です</span>{% endif %}
                             </span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" name="make_absent" id="make_absent" value="1" {% if is_absent %}checked{% endif %}>
-                            <span>欠勤（当欠）にする <span style="color: var(--gray-400); font-size: 0.8rem;">※ チェックすると上の打刻はすべて当欠に置き換わります</span></span>
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <span>欠勤</span>
+                            <select class="form-input" name="absence_type" id="absence_type" style="max-width: 140px;">
+                                <option value="" {% if not absent_status %}selected{% endif %}>なし（出勤）</option>
+                                {% for at in absence_types %}
+                                <option value="{{ at }}" {% if absent_status == at %}selected{% endif %}>{{ at }}</option>
+                                {% endfor %}
+                            </select>
+                            <span style="color: var(--gray-400); font-size: 0.8rem;">※ 当欠・病欠を選ぶと上の打刻はすべて置き換わります</span>
                         </label>
                     </div>
 
@@ -172,16 +178,16 @@ function addRow() {
     countInput.value = i + 1;
 }
 
-// 当欠チェック時は打刻編集を無効化して意図を明確にする
-var absentBox = document.getElementById('make_absent');
-if (absentBox) {
+// 欠勤（当欠/病欠）を選んだら打刻編集を無効化して意図を明確にする
+var absentSelect = document.getElementById('absence_type');
+if (absentSelect) {
     function toggleRows() {
-        var disabled = absentBox.checked;
+        var disabled = absentSelect.value !== '';
         document.querySelectorAll('#rows-body input, #rows-body select').forEach(function(el) {
             el.disabled = disabled;
         });
     }
-    absentBox.addEventListener('change', toggleRows);
+    absentSelect.addEventListener('change', toggleRows);
     toggleRows();
 }
 </script>
