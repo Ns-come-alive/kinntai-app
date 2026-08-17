@@ -7,34 +7,62 @@ name: Keep Render warm
 # ※ 以前は STORE_BASE_URLS で「対象を丸ごと差し替える」方式だったが、
 #   変数を設定すると既定が無視され、片方の店舗が休止してしまう事故があったため、
 #   既定は常に温める方式に変更した。
+#
+# ※ GitHub のスケジュール実行は混雑時に10〜30分以上遅れる/飛ぶことが多く、
+#   「1回の起動で1回だけping」では遅延したときにスリープ（15分無アクセス）に
+#   間に合わず、Render の待機画面（コールドスタート）が出ていた。
+#   そこで 1回の起動の中で 2分おきに約14分間ping し続ける「自己ブリッジ」方式にして、
+#   1回の実行だけでスリープ窓（15分）をほぼ丸ごとカバーできるようにしている。
 
 on:
   schedule:
-    # GitHub のスケジュールは混雑時に数分遅れることがあるため、
-    # 15分の休止に確実に間に合うよう 10分間隔にしている。
+    # 10分間隔で起動しつつ、各実行が内部で約14分pingし続けるので、
+    # 実行同士が重なり、多少の遅延があっても隙間ができにくい。
     - cron: "*/10 * * * *"
   workflow_dispatch:
+
+# 遅延した実行が重なっても止めない（重なりこそが隙間対策になる）ので
+# concurrency は設定しない。
 
 env:
   # 常に温める店舗（変数の設定に関わらず必ず対象）
   DEFAULT_STORE_BASE_URLS: "https://kinntai-app.onrender.com https://kintai-app-bluebell.onrender.com"
   # 追加店舗があればここに足す（未設定なら何も足さない）
   EXTRA_STORE_BASE_URLS: ${{ vars.EXTRA_STORE_BASE_URLS }}
+  # 1回の起動で ping し続ける長さ（分）と間隔（秒）
+  WARM_DURATION_MIN: "14"
+  WARM_INTERVAL_SEC: "120"
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    # 内部ループが約14分回る。取りこぼし対策の余裕を持って上限を置く。
+    timeout-minutes: 20
     steps:
-      - name: Ping health check
+      - name: Keep warm (loop ping)
         run: |
-          failed=0
+          # 重複URLを除いた対象リストを作る
+          targets=""
           seen=""
           for base in $DEFAULT_STORE_BASE_URLS $EXTRA_STORE_BASE_URLS; do
             base="${base%/}"
-            # 重複URLは1回だけpingする
             case " $seen " in *" $base "*) continue;; esac
             seen="$seen $base"
-            echo -n "$base -> "
-            curl -fsSL -o /dev/null -w "HTTP %{http_code}\n" "$base/healthz" || { echo "failed"; failed=1; }
+            targets="$targets $base"
           done
-          exit $failed
+          echo "targets:$targets"
+
+          end=$(( $(date +%s) + WARM_DURATION_MIN * 60 ))
+          round=0
+          while :; do
+            round=$((round + 1))
+            echo "===== round $round ($(date -u +%H:%M:%S)Z) ====="
+            for base in $targets; do
+              # 温めるのが目的なので、失敗しても打ち切らずログだけ残して継続する。
+              code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 90 "$base/healthz" || echo "000")
+              echo "$base -> HTTP $code"
+            done
+            # 予定終了時刻を過ぎたら、最後のpingを済ませているので抜ける
+            [ "$(date +%s)" -ge "$end" ] && break
+            sleep "$WARM_INTERVAL_SEC"
+          done
