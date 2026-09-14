@@ -127,11 +127,58 @@ def _group_casts_by_store(casts):
     return groups
 
 
+# 再出勤の遅刻誤判定を直す既存データ修正の対象開始日（この日以降の営業日）。
+RECLOCKIN_FIX_FROM = "2026-08-01"
+_reclockin_fix_done = False
+_reclockin_fix_lock = threading.Lock()
+
+
+def _fix_reclockin_late_status(db):
+    """既存データ修正: 同じ営業日の2回目以降の出勤打刻に付いた「遅刻」を取り消す。
+
+    以前は再出勤もシフト開始時刻と比較して遅刻判定していたため、退勤後に再出勤すると
+    「遅刻」になり遅刻時間が二重計上されていた。RECLOCKIN_FIX_FROM 以降の営業日について、
+    その日の最初の出勤（欠勤を除く id 最小の行）以外で「遅刻」を含む行を「出勤」（同伴なら
+    「同伴」）にし、遅刻理由を空にする。冪等なので何度実行しても同じ結果になる。
+    修正した行があれば、その月のスプレッドシートを再同期する。戻り値は修正した行数。"""
+    cur = db.execute(
+        """UPDATE attendance
+           SET status = CASE WHEN punch_type = 'douhan' THEN '同伴' ELSE '出勤' END,
+               late_reason = ''
+           WHERE business_date >= ?
+             AND punch_type != 'absent'
+             AND status LIKE ?
+             AND id > (SELECT MIN(b.id) FROM attendance b
+                       WHERE b.user_id = attendance.user_id
+                         AND b.business_date = attendance.business_date
+                         AND b.punch_type != 'absent')
+           RETURNING business_date""",
+        (RECLOCKIN_FIX_FROM, "%遅刻%"),
+    )
+    fixed = cur.fetchall()
+    db.commit()
+    if fixed:
+        months = sorted({r["business_date"][:7] for r in fixed})
+        logger.info("再出勤の遅刻誤判定を %d 件修正しました（対象月: %s）", len(fixed), ", ".join(months))
+        for m in months:
+            _sync_sheets(db, None, f"{m}-15")
+    return len(fixed)
+
+
 @app.before_request
 def before_request():
+    global _reclockin_fix_done
     if request.path == "/healthz":
         return
     init_db()
+    if not _reclockin_fix_done:
+        with _reclockin_fix_lock:
+            if not _reclockin_fix_done:
+                try:
+                    _fix_reclockin_late_status(get_db())
+                except Exception:
+                    logger.exception("再出勤の遅刻誤判定の修正に失敗しました")
+                _reclockin_fix_done = True
 
 
 @app.route("/healthz")
@@ -393,11 +440,21 @@ def clock_in():
         flash("現在勤務中です。先に退勤してください。", "warning")
         return redirect(url_for("dashboard"))
 
-    status = _determine_status(db, user_id, business_date, clock_time, punch_type)
-    is_late = (status == "遅刻")
+    # 同じ営業日に既に出勤打刻（欠勤を除く）があれば再出勤扱い。
+    # 遅刻判定はその日の最初の出勤にだけ行い、2回目以降はスキップする。
+    has_prior = db.execute(
+        "SELECT 1 FROM attendance WHERE user_id = ? AND business_date = ? AND punch_type != 'absent' LIMIT 1",
+        (user_id, business_date),
+    ).fetchone() is not None
 
-    if punch_type == "douhan":
-        status = "同伴" if not is_late else "同伴・遅刻"
+    if has_prior:
+        status = "同伴" if punch_type == "douhan" else "出勤"
+        is_late = False
+    else:
+        status = _determine_status(db, user_id, business_date, clock_time, punch_type)
+        is_late = (status == "遅刻")
+        if punch_type == "douhan":
+            status = "同伴" if not is_late else "同伴・遅刻"
 
     if is_late:
         session["pending_clock"] = {
@@ -1274,6 +1331,7 @@ def admin_edit_save():
             (cast_id, date),
         )
         count = request.form.get("row_count", 0, type=int)
+        saved_rows = 0  # 遅刻判定はその日の最初の打刻行にだけ行う
         for i in range(count):
             rec_id = request.form.get(f"rec_id_{i}", type=int)
             if request.form.get(f"delete_{i}"):
@@ -1303,12 +1361,18 @@ def admin_edit_save():
             clock_in = cin + ":00"
             clock_out = (cout + ":00") if cout else None
 
-            status = _determine_status(db, cast_id, date, clock_in, ptype)
-            is_late = (status == "遅刻")
-            if ptype == "douhan":
-                status = "同伴" if not is_late else "同伴・遅刻"
+            if saved_rows == 0:
+                status = _determine_status(db, cast_id, date, clock_in, ptype)
+                is_late = (status == "遅刻")
+                if ptype == "douhan":
+                    status = "同伴" if not is_late else "同伴・遅刻"
+            else:
+                # 2回目以降の打刻（再出勤）は遅刻判定しない
+                status = "同伴" if ptype == "douhan" else "出勤"
+                is_late = False
             if not is_late:
                 reason = ""
+            saved_rows += 1
 
             if rec_id:
                 db.execute(
