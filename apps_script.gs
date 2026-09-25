@@ -1,5 +1,6 @@
 /**
  * 勤怠アプリ → スプレッドシート連携用 Google Apps Script
+ 
  *
  * 使い方:
  *  1. 連携したい Google スプレッドシートを開く
@@ -13,7 +14,7 @@
 var SECRET = "";
 
 // このコードのバージョン（デプロイ確認用）
-var VERSION = "v7-summary-history";
+var VERSION = "v8-numeric-hours";
 
 // 見た目の設定
 var COLOR_TITLE_BG = "#4472C4";   // 見出し帯（濃い青）
@@ -22,23 +23,48 @@ var COLOR_HEADER_BG = "#d9e1f2";  // 表ヘッダー（薄い青）
 var COLOR_LABEL_BG = "#eef2f9";   // 集計ラベル（うすいグレー青）
 var COLOR_BORDER = "#9fb3d1";     // 枠線
 
+// 時間数(h)の表示書式。時刻書式(0:00:00)が残っていると 0 が時刻として
+// 読まれ、給与計算側で -0.375 のような値になるため、数値書式を明示する。
+var FORMAT_HOURS = "0.00";
+var FORMAT_COUNT = "0";
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     if (SECRET && data.secret !== SECRET) {
       return ContentService.createTextOutput("forbidden");
     }
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (data.cast) {
-      writeCastTab_(ss, data.cast);
-    }
-    if (data.summary) {
-      writeSummaryTab_(ss, data.summary);
+    // 打刻ごとに送信されるため同時実行があり得る。書き込みが交互に混ざると
+    // 打刻履歴の時刻書式が集計欄に残るので、1件ずつ順番に処理する。
+    var lock = LockService.getScriptLock();
+    lock.waitLock(60000);
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      writePayload_(ss, data);
+      SpreadsheetApp.flush();
+    } finally {
+      lock.releaseLock();
     }
     return ContentService.createTextOutput("ok " + VERSION);
   } catch (err) {
     return ContentService.createTextOutput("error: " + err);
   }
+}
+
+function writePayload_(ss, data) {
+  if (data.cast) {
+    writeCastTab_(ss, data.cast);
+  }
+  if (data.summary) {
+    writeSummaryTab_(ss, data.summary);
+  }
+}
+
+// 見出し名から列を探し、見つかった列（データ行のみ）に数値書式を設定する
+function setColumnFormat_(sh, header, name, top, numRows, format) {
+  var idx = header.indexOf(name);
+  if (idx < 0 || numRows <= 0) return;
+  sh.getRange(top, idx + 1, numRows, 1).setNumberFormat(format);
 }
 
 // ブラウザ確認用（GETでバージョン表示）
@@ -154,6 +180,12 @@ function writeSummaryTab_(ss, summary) {
 
   if (rows.length > 0) {
     var range = sh.getRange(row, 1, rows.length, sumCols);
+    // 見出し以外の列（出勤日数〜送迎料金）は数値。時刻書式が付かないよう先に指定する。
+    if (rows.length > 1 && sumCols > 1) {
+      sh.getRange(row + 1, 2, rows.length - 1, sumCols - 1).setNumberFormat(FORMAT_COUNT);
+      setColumnFormat_(sh, rows[0], "総稼働時間(h)", row + 1, rows.length - 1, FORMAT_HOURS);
+      setColumnFormat_(sh, rows[0], "遅刻時間(h)", row + 1, rows.length - 1, FORMAT_HOURS);
+    }
     range.setValues(rows)
       .setBorder(true, true, true, true, true, true, COLOR_BORDER, SpreadsheetApp.BorderStyle.SOLID)
       .setHorizontalAlignment("center");
@@ -176,6 +208,7 @@ function writeSummaryTab_(ss, summary) {
   }
   if (history.length > 0) {
     sh.getRange(row, 1, history.length, header.length).setValues(history);
+    setColumnFormat_(sh, header, "稼働(h)", row, history.length, FORMAT_HOURS);
     row += history.length;
   }
   var tableRows = row - tableTop;
